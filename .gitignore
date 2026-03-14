@@ -1,0 +1,23 @@
+# Virtual Environment
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Project specific docs to ignore as requested
+AGENTS.md
+antigravity.md
+specs.md
+
+# Debug and data
+debug/
+data/
+/tmp/
+
+# IDEs
+.vscode/
+.idea/
