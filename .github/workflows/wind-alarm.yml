@@ -1,0 +1,38 @@
+name: Daily Wind Alarm Check
+
+on:
+  schedule:
+    # Runs at 04:00 UTC every day.
+    # Note: UTC time does not observe daylight saving time.
+    # 04:00 UTC = 05:00 CET (Winter) / 06:00 CEST (Summer in Germany)
+    - cron: '0 4 * * *'
+  
+  # Allow manual triggering of the workflow from the GitHub UI
+  workflow_dispatch:
+
+jobs:
+  check-wind:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip' # caching pip dependencies
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright Browsers
+        run: |
+          playwright install chromium
+
+      - name: Run Wind Alarm Agent
+        run: |
+          PYTHONPATH=src python app.py
