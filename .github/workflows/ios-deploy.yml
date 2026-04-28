@@ -1,0 +1,43 @@
+name: iOS Build & TestFlight
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Build & Deploy to TestFlight
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.13.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: |
+          cd app
+          flutter pub get
+
+      - name: Install Provisioning Profile & Certificate
+        run: |
+          # We will need to add the decryption/import logic here once you have the secrets
+          echo "Setting up certificates..."
+          
+      - name: Build IPA
+        run: |
+          cd app
+          # This command builds the app for release
+          # flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+          
+      - name: Upload to App Store Connect
+        run: |
+          # xcrun altool --upload-app --type ios --file app/build/ios/ipa/*.ipa --apiKey ${{ secrets.API_KEY_ID }} --apiIssuer ${{ secrets.API_ISSUER_ID }}
+          echo "Uploading to TestFlight..."

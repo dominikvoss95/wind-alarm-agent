@@ -1,0 +1,19 @@
+site_name: Wind Alarm Agent
+nav:
+  - Home: index.md
+  - Architecture: flutter_app_architecture.md
+
+theme:
+  name: material
+  palette:
+    scheme: slate
+    primary: light blue
+    accent: cyan
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences

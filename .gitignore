@@ -21,3 +21,6 @@ data/
 # IDEs
 .vscode/
 .idea/
+
+# Secrets
+serviceAccountKey.json
