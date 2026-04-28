@@ -2,10 +2,9 @@ name: Daily Wind Alarm Check
 
 on:
   schedule:
-    # Runs at 04:00 UTC every day.
-    # Note: UTC time does not observe daylight saving time.
-    # 04:00 UTC = 05:00 CET (Winter) / 06:00 CEST (Summer in Germany)
-    - cron: '0 4 * * *'
+    # Runs every 15 minutes between 03:00 and 06:00 UTC (05:00 - 08:00 CEST).
+    # This covers the typical early morning wind window at Kochelsee.
+    - cron: '*/15 3-6 * * *'
   
   # Allow manual triggering of the workflow from the GitHub UI
   workflow_dispatch:
@@ -13,6 +12,9 @@ on:
 jobs:
   check-wind:
     runs-on: ubuntu-latest
+
+    env:
+      FCM_TOPIC: "wind_alarms" # Consistent with app.py and Flutter app
 
     steps:
       - name: Checkout repository
@@ -22,7 +24,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-          cache: 'pip' # caching pip dependencies
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
@@ -33,6 +35,14 @@ jobs:
         run: |
           playwright install chromium
 
+      - name: Create Firebase Service Account Key
+        # This takes the content of the GH Secret and writes it to the file path defined in config.py
+        run: |
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}" > serviceAccountKey.json
+        if: "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON != '' }}"
+
       - name: Run Wind Alarm Agent
         run: |
-          PYTHONPATH=src python app.py
+          PYTHONPATH=src python app.py --threshold 10.0
+        env:
+          PYTHONPATH: src

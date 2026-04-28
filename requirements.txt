@@ -8,3 +8,5 @@ mkdocs~=1.6
 playwright
 opencv-python-headless
 easyocr
+firebase-admin
+python-dotenv

@@ -7,9 +7,22 @@ from datetime import datetime, timezone
 
 import cv2
 import easyocr
+import firebase_admin
+from firebase_admin import credentials, messaging
 from playwright.sync_api import sync_playwright
 
 from wind_alarm.state import WindGraphState
+from wind_alarm.config import config
+
+# --- Firebase Initialization ---
+# Configuration loaded from environment or default file
+try:
+    cred = credentials.Certificate(config.FIREBASE_CREDENTIALS_PATH)
+    firebase_admin.initialize_app(cred)
+except Exception as e:
+    # Fallback/Log if credentials are missing. 
+    # In production, we'd log this properly.
+    print(f"Warning: Firebase not initialized: {e}")
 
 
 def fetch_primary_source(state: WindGraphState) -> WindGraphState:
@@ -24,7 +37,7 @@ def fetch_primary_source(state: WindGraphState) -> WindGraphState:
         }
 
     now = datetime.now(timezone.utc).isoformat()
-    screenshot_path = "debug/full_screenshot.png"
+    screenshot_path = str(config.DEBUG_DIR / "full_screenshot.png")
 
     ad_patterns = [
         "*doubleclick.net*", "*googlesyndication*", "*googleadservices*",
@@ -110,7 +123,7 @@ _CACHE = {}
 def _get_reader() -> easyocr.Reader:
     """Lazily load the easyOCR reader."""
     if "reader" not in _CACHE:
-        _CACHE["reader"] = easyocr.Reader(["en", "de"])
+        _CACHE["reader"] = easyocr.Reader(config.OCR_LANGUAGES)
     return _CACHE["reader"]
 
 
@@ -216,10 +229,26 @@ def check_threshold(state: WindGraphState) -> WindGraphState:
 
 def send_notification(state: WindGraphState) -> WindGraphState:
     """
-    Trigger notification only when all required conditions are met.
+    Trigger notification via Firebase Cloud Messaging if threshold exceeded.
     """
     if not state.get("threshold_exceeded"):
         return {"notification_sent": False}
 
-    # MVP mock notification logic
-    return {"notification_sent": True}
+    topic = "wind_alarms"
+
+    message = messaging.Message(
+        data={
+            'action': 'schedule_alarm',
+            'base_wind': str(state.get("base_wind_knots")),
+        },
+        topic=config.FCM_TOPIC,
+        android=messaging.AndroidConfig(priority='high'),
+    )
+
+    try:
+        response = messaging.send(message)
+        print(f"Successfully sent message to topic {config.FCM_TOPIC}: {response}")
+        return {"notification_sent": True}
+    except Exception as exc:
+        print(f"Error sending Firebase message: {exc}")
+        return {"notification_sent": False, "error_message": f"Firebase send error: {str(exc)}"}

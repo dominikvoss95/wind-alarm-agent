@@ -2,7 +2,7 @@
 Main entry point to run the Wind Alarm Agent.
 """
 import argparse
-import json
+import time
 from wind_alarm.graph import build_wind_alarm_graph
 from wind_alarm.state import WindGraphState
 
@@ -26,39 +26,63 @@ def main():
         default=60, 
         help="Max age of data in minutes."
     )
+    parser.add_argument(
+        "--token", 
+        type=str, 
+        help="The target FCM token to send the notification to."
+    )
+    parser.add_argument(
+        "--loop", 
+        action="store_true", 
+        help="Run in a loop indefinitely."
+    )
+    parser.add_argument(
+        "--interval", 
+        type=int, 
+        default=30, 
+        help="Interval between checks in minutes (only if --loop is used)."
+    )
     
     args = parser.parse_args()
 
     # Initialize graph
     app = build_wind_alarm_graph()
     
-    initial_state = WindGraphState(
-        source_identifier=args.url,
-        threshold_knots=args.threshold,
-        freshness_limit_minutes=args.freshness
-    )
-
     print(f"--- Starting Wind Alarm Agent for {args.url} ---")
-    print(f"Threshold: {args.threshold} kts | Freshness Limit: {args.freshness} min\n")
-
-    # Run the graph
-    result = app.invoke(initial_state)
-
-    # Output formatted results
-    print("--- Results ---")
-    print(f"Fetch Status:    {result.get('fetch_status')}")
-    print(f"Parse Status:    {result.get('parse_status')}")
+    if args.loop:
+        print(f"Monitoring mode: active (Interval: {args.interval} min)")
     
-    if result.get('parse_status') == 'success':
-        print(f"Observed At:     {result.get('observed_at')}")
-        print(f"Wind Speed:      {result.get('base_wind_knots')} kts")
-        print(f"Gusts:           {result.get('gust_knots')} kts")
-        print(f"Data Fresh:      {result.get('is_fresh')}")
-        print(f"Limit Exceeded:  {result.get('threshold_exceeded')}")
-        print(f"Notification:    {'SENT' if result.get('notification_sent') else 'None'}")
-    
-    if result.get('error_message'):
-        print(f"\nERROR: {result.get('error_message')}")
+    while True:
+        initial_state = WindGraphState(
+            source_identifier=args.url,
+            threshold_knots=args.threshold,
+            freshness_limit_minutes=args.freshness,
+            target_fcm_token=args.token
+        )
+
+        current_time = time.strftime('%H:%M:%S')
+        print(f"\n[{current_time}] Checking wind...")
+        
+        # Run the graph
+        try:
+            result = app.invoke(initial_state)
+
+            # Output formatted results
+            print("--- Results ---")
+            print(f"Wind Speed:      {result.get('base_wind_knots')} kts")
+            print(f"Limit Exceeded:  {result.get('threshold_exceeded')}")
+            print(f"Notification:    {'SENT' if result.get('notification_sent') else 'None'}")
+            
+            if result.get('error_message'):
+                print(f"ERROR: {result.get('error_message')}")
+        except Exception as e:
+            print(f"CRITICAL ERROR during execution: {e}")
+
+        if not args.loop:
+            break
+            
+        print(f"Sleeping for {args.interval} minutes... (Ctrl+C to stop)")
+        time.sleep(args.interval * 60)
 
 if __name__ == "__main__":
     main()
