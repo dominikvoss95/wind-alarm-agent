@@ -26,18 +26,31 @@ jobs:
           cd app
           flutter pub get
 
-      - name: Install Provisioning Profile & Certificate
+      - name: Install Provisioning Profile
         run: |
-          # We will need to add the decryption/import logic here once you have the secrets
-          echo "Setting up certificates..."
-          
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "${{ secrets.PROVISIONING_PROFILE }}" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/distribution.mobileprovision
+
+      - name: Install Certificate
+        run: |
+          echo "${{ secrets.P12_CERTIFICATE }}" | base64 --decode > distribution.p12
+          security create-keychain -p "" build.keychain
+          security list-keychains -s build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import distribution.p12 -k build.keychain -P "${{ secrets.P12_PASSWORD }}" -A -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
+
       - name: Build IPA
         run: |
+          sed -i '' "s/REPLACE_WITH_YOUR_TEAM_ID/${{ secrets.APPLE_TEAM_ID }}/g" app/ios/ExportOptions.plist
           cd app
-          # This command builds the app for release
-          # flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
-          
-      - name: Upload to App Store Connect
-        run: |
-          # xcrun altool --upload-app --type ios --file app/build/ios/ipa/*.ipa --apiKey ${{ secrets.API_KEY_ID }} --apiIssuer ${{ secrets.API_ISSUER_ID }}
-          echo "Uploading to TestFlight..."
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+
+      - name: Upload to TestFlight
+        uses: apple-actions/upload-testflight-build@v1
+        with:
+          app-path: 'app/build/ios/ipa/*.ipa'
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          api-key-content: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}
