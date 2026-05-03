@@ -29,7 +29,26 @@ class Config:
     CAM_ID = "kochelsee/trimini"
     PAGE_URL_TEMPLATE = "https://www.addicted-sports.com/webcam/{cam_id}/#/{y}/{m}/{d}/{hm}"
     DEFAULT_WEBCAM_URL = "https://www.addicted-sports.com/webcam/kochelsee/trimini/"
-    
+
+    LOCATIONS = {
+        "kochelsee": {
+            "name": "Kochelsee",
+            "fcm_topic": "wind_alarms_kochelsee",
+            "urls": [
+                "https://www.addicted-sports.com/webcam/kochelsee/trimini/"
+            ],
+        },
+        "gardasee": {
+            "name": "Gardasee",
+            "fcm_topic": "wind_alarms_gardasee",
+            "urls": [
+                "https://www.addicted-sports.com/webcam/gardasee/malcesinenord/",
+                "https://www.addicted-sports.com/webcam/gardasee/malcesine/",
+                "https://www.addicted-sports.com/webcam/gardasee/campione/",
+            ],
+        },
+    }
+
     # OCR settings
     OCR_LANGUAGES = ["en", "de"]
 

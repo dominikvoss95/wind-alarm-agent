@@ -24,3 +24,18 @@ data/
 
 # Secrets
 serviceAccountKey.json
+*.env
+.env
+config.toml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/

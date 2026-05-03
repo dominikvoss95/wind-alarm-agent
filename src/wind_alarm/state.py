@@ -11,6 +11,8 @@ class WindGraphState(TypedDict, total=False):
     and threshold evaluations.
     """
     source_identifier: str
+    location_id: str
+    target_fcm_topic: str
     threshold_knots: float
     freshness_limit_minutes: int
 
@@ -26,5 +28,6 @@ class WindGraphState(TypedDict, total=False):
     is_fresh: bool
     threshold_exceeded: bool
     notification_sent: bool
+    firestore_saved: bool
 
     error_message: str

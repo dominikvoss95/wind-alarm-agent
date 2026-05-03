@@ -43,6 +43,6 @@ jobs:
 
       - name: Run Wind Alarm Agent
         run: |
-          PYTHONPATH=src python app.py --threshold 10.0
+          PYTHONPATH=src python app.py --location kochelsee --threshold 10.0
         env:
           PYTHONPATH: src

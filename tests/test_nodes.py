@@ -40,7 +40,7 @@ def test_fetch_primary_source_success(mock_playwright):
     state = WindGraphState(source_identifier="http://example.com")
     result = fetch_primary_source(state)
 
-    expected_path = str(config.DEBUG_DIR / "full_screenshot.png")
+    expected_path = str(config.DEBUG_DIR / "default_example.com_screenshot.png")
     assert result.get("fetch_status") == "success"
     assert result.get("raw_payload") == expected_path
     assert result.get("error_message") == ""

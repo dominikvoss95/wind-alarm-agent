@@ -8,11 +8,12 @@ from datetime import datetime, timezone
 import cv2
 import easyocr
 import firebase_admin
-from firebase_admin import credentials, messaging
+from firebase_admin import credentials, messaging, firestore
 from playwright.sync_api import sync_playwright
 
 from wind_alarm.state import WindGraphState
 from wind_alarm.config import config
+from wind_alarm import store
 
 # --- Firebase Initialization ---
 # Configuration loaded from environment or default file
@@ -37,7 +38,10 @@ def fetch_primary_source(state: WindGraphState) -> WindGraphState:
         }
 
     now = datetime.now(timezone.utc).isoformat()
-    screenshot_path = str(config.DEBUG_DIR / "full_screenshot.png")
+    location_id = state.get("location_id", "default")
+    # Sanitize URL for filename
+    cam_name = source_url.rstrip("/").split("/")[-1]
+    screenshot_path = str(config.DEBUG_DIR / f"{location_id}_{cam_name}_screenshot.png")
 
     ad_patterns = [
         "*doubleclick.net*", "*googlesyndication*", "*googleadservices*",
@@ -234,21 +238,71 @@ def send_notification(state: WindGraphState) -> WindGraphState:
     if not state.get("threshold_exceeded"):
         return {"notification_sent": False}
 
-    topic = "wind_alarms"
+    topic = state.get("target_fcm_topic", config.FCM_TOPIC)
 
     message = messaging.Message(
         data={
             'action': 'schedule_alarm',
             'base_wind': str(state.get("base_wind_knots")),
+            'gust': str(state.get("gust_knots")),
         },
-        topic=config.FCM_TOPIC,
+        topic=topic,
         android=messaging.AndroidConfig(priority='high'),
     )
 
     try:
         response = messaging.send(message)
-        print(f"Successfully sent message to topic {config.FCM_TOPIC}: {response}")
+        print(f"Successfully sent message to topic {topic}: {response}")
         return {"notification_sent": True}
     except Exception as exc:
         print(f"Error sending Firebase message: {exc}")
         return {"notification_sent": False, "error_message": f"Firebase send error: {str(exc)}"}
+
+
+def save_to_firestore(state: WindGraphState) -> WindGraphState:
+    """
+    Save the parsed wind data to Firestore so the app can show realtime data.
+    """
+    if state.get("parse_status") != "success":
+        return {"firestore_saved": False}
+
+    try:
+        db = firestore.client()
+        
+        source_url = state.get("source_identifier", "")
+        # e.g., 'trimini', 'malcesinenord'
+        cam_name = source_url.rstrip("/").split("/")[-1].lower()
+        location_id = state.get("location_id", "default").lower()
+
+        doc_ref = db.collection("latest_measurements").document(f"{location_id}_{cam_name}")
+        doc_ref.set({
+            "location_id": location_id,
+            "cam_id": cam_name,
+            "base_wind": state.get("base_wind_knots", 0.0),
+            "gust": state.get("gust_knots", 0.0),
+            "observed_at": state.get("observed_at"),
+            "fetched_at": state.get("fetched_at"),
+            "is_fresh": state.get("is_fresh", False),
+            "updated_at": firestore.SERVER_TIMESTAMP
+        })
+        
+        print(f"Saved live metrics to Firestore: {location_id}_{cam_name}")
+        return {"firestore_saved": True}
+    except Exception as exc:
+        print(f"Error saving to Firestore: {exc}")
+        return {"firestore_saved": False, "error_message": f"Firestore save error: {str(exc)}"}
+
+
+def save_measurement(state: WindGraphState) -> WindGraphState:
+    """
+    Save the parsed measurement to the in-memory store for API access.
+    """
+    if state.get("parse_status") != "success":
+        return {"measurement_saved": False}
+
+    location_id = state.get("location_id", "default")
+    try:
+        store.set_measurement(location_id, dict(state))
+        return {"measurement_saved": True}
+    except Exception as exc:
+        return {"measurement_saved": False, "error_message": f"Store save error: {str(exc)}"}
