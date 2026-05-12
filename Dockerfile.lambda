@@ -1,0 +1,5 @@
+FROM public.ecr.aws/lambda/python:3.12
+RUN pip install -r requirements.txt
+COPY src/ ${LAMBDA_TASK_ROOT}/src/
+ENV PYTHONPATH=${LAMBDA_TASK_ROOT}
+CMD ["src.handlers.lambda_handler.lambda_handler"]
