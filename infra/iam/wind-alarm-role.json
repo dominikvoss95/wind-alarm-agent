@@ -1,0 +1,9 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {"Effect": "Allow", "Action": ["lambda:InvokeFunction"], "Resource": "arn:aws:lambda:eu-central-1:ACCOUNT:function:wind-alarm-*"},
+    {"Effect": "Allow", "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query"], "Resource": "arn:aws:dynamodb:eu-central-1:ACCOUNT:table/wind-alarm-*"},
+    {"Effect": "Allow", "Action": ["bedrock:InvokeModel"], "Resource": "arn:aws:bedrock:eu-central-1:ACCOUNT:foundation-model/amazon.nova-lite-v1:0"},
+    {"Effect": "Deny", "Action": ["dynamodb:DeleteTable"], "Resource": "*"}
+  ]
+}
