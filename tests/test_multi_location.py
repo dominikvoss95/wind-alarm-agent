@@ -34,26 +34,23 @@ def test_send_notification_uses_custom_topic(mock_send):
     message = args[0]
     assert message.topic == custom_topic
 
-@patch("app.build_wind_alarm_graph")
-@patch("app.time.sleep", side_effect=InterruptedError) # To break the loop if --loop used, but here we test non-loop
-def test_app_gardasee_invokes_three_urls(mock_sleep, mock_build_graph):
-    """Verify that running app for Gardasee invokes the graph for all 3 URLs."""
-    mock_app = MagicMock()
-    mock_build_graph.return_value = mock_app
-    mock_app.invoke.return_value = {"threshold_exceeded": False, "base_wind_knots": 5.0}
+@patch("wind_alarm.orchestrator.get_orchestrator")
+@patch("app.time.sleep", side_effect=InterruptedError)
+def test_app_gardasee_invokes_three_urls(mock_sleep, mock_get_orch):
+    """Verify that running app for Gardasee invokes the orchestrator for all 3 URLs."""
+    mock_orch = MagicMock()
+    mock_orch.get_name.return_value = "LangGraph"
+    mock_get_orch.return_value = mock_orch
 
     import sys
     with patch.object(sys, 'argv', ['app.py', '--location', 'gardasee']):
-         try:
-             main()
-         except SystemExit:
-             pass
-    
-    # Should be called 3 times (one for each Gardasee URL)
-    assert mock_app.invoke.call_count == 3
-    
-    # Check that location_id and target_fcm_topic were passed correctly in state
-    for call in mock_app.invoke.call_args_list:
+        try:
+            main()
+        except SystemExit:
+            pass
+
+    assert mock_orch.invoke.call_count == 3
+    for call in mock_orch.invoke.call_args_list:
         state = call[0][0]
         assert state["location_id"] == "gardasee"
         assert state["target_fcm_topic"] == "wind_alarms_gardasee"
