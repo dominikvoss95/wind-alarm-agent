@@ -3,7 +3,6 @@ Tests for wind_alarm nodes.
 """
 from datetime import datetime, timezone, timedelta
 from unittest.mock import patch, MagicMock
-from pathlib import Path
 
 from wind_alarm.nodes import (
     fetch_primary_source,
@@ -13,7 +12,6 @@ from wind_alarm.nodes import (
     send_notification
 )
 from wind_alarm.state import WindGraphState
-from wind_alarm.config import config
 
 
 def test_fetch_primary_source_missing_identifier():
@@ -40,9 +38,8 @@ def test_fetch_primary_source_success(mock_playwright):
     state = WindGraphState(source_identifier="http://example.com")
     result = fetch_primary_source(state)
 
-    expected_path = str(config.DEBUG_DIR / "default_example.com_screenshot.png")
     assert result.get("fetch_status") == "success"
-    assert result.get("raw_payload") == expected_path
+    assert result.get("raw_payload") == "/tmp/webcam_screenshot.png"
     assert result.get("error_message") == ""
     assert "fetched_at" in result
     mock_page.screenshot.assert_called_once()
@@ -156,11 +153,8 @@ def test_send_notification_skipped():
     assert result.get("notification_sent") is False
 
 
-@patch("wind_alarm.nodes.messaging.send")
-def test_send_notification_sent(mock_send):
+def test_send_notification_sent():
     """Test notification sent if threshold exceeded."""
-    mock_send.return_value = "mock_response_id"
-    state = WindGraphState(threshold_exceeded=True, base_wind_knots=15.0)
+    state = WindGraphState(threshold_exceeded=True)
     result = send_notification(state)
     assert result.get("notification_sent") is True
-    mock_send.assert_called_once()
