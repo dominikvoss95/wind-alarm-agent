@@ -21,3 +21,15 @@ data/
 # IDEs
 .vscode/
 .idea/
+
+# Secrets and Keys (CRITICAL)
+.env
+.env.*
+*.json
+!pyproject.toml
+!package.json
+!manifest.json
+
+# AWS and Cloud CLI
+.aws/
+terraform.tfstate*

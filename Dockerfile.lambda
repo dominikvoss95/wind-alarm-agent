@@ -1,5 +1,9 @@
 FROM public.ecr.aws/lambda/python:3.12
 RUN pip install -r requirements.txt
-COPY src/ ${LAMBDA_TASK_ROOT}/src/
+# Copy src content to the root package
+COPY src/wind_alarm/ ${LAMBDA_TASK_ROOT}/wind_alarm/
+COPY app.py ${LAMBDA_TASK_ROOT}/
+
 ENV PYTHONPATH=${LAMBDA_TASK_ROOT}
-CMD ["src.handlers.lambda_handler.lambda_handler"]
+
+CMD ["wind_alarm.aws.lambda_handler.handler"]

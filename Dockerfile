@@ -17,9 +17,8 @@ WORKDIR /app
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         curl \
-        dumb-init \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd -r -u 1001 -g 0 tini
+        tini \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
 COPY requirements.txt .

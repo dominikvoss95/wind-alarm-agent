@@ -7,24 +7,26 @@ on:
     branches: [main, develop]
 
 jobs:
-  test:
+  quality-and-security:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      - run: pip install -r requirements.txt
-      - run: PYTHONPATH=src python -m pytest tests/ -v
-      - run: pylint src/ tests/ app.py --fail-under=8.0
+          python-version: '3.13'
+          cache: 'pip'
 
-  security:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: pip install -r requirements.txt
-      - run: bandit -r src/ -f json -o bandit-report.json || true
-      - uses: actions/upload-artifact@v4
-        with:
-          name: security-report
-          path: bandit-report.json
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Tests
+        run: make test
+
+      - name: Run Linting
+        run: make lint
+
+      - name: Run Security Scan
+        run: make scan
+
+      - name: Build Docker Image
+        run: make build

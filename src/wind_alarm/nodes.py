@@ -1,6 +1,7 @@
 """
 Node definitions for the Wind Alarm graph.
 """
+import logging
 import re
 import time
 from datetime import datetime, timezone
@@ -72,8 +73,8 @@ def fetch_primary_source(state: WindGraphState) -> WindGraphState:
                     btn.click()
                     btn.wait_for(state="hidden", timeout=5000.0)
                     time.sleep(2)
-            except Exception:  # pylint: disable=broad-exception-caught
-                pass
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                logging.warning("Cookie consent interaction skipped: %s", exc)
 
             # Click weather overlay using a robust selector
             time.sleep(2)
