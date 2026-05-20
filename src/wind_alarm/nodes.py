@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import cv2
 import easyocr
 from playwright.sync_api import sync_playwright
+from firebase_admin import messaging
 
 from wind_alarm.state import WindGraphState
 
@@ -222,5 +223,22 @@ def send_notification(state: WindGraphState) -> WindGraphState:
     if not state.get("threshold_exceeded"):
         return {"notification_sent": False}
 
-    # MVP mock notification logic
-    return {"notification_sent": True}
+    topic = state.get("target_fcm_topic", "wind_alarms")
+    base_wind = state.get("base_wind_knots", 0.0)
+    location_id = state.get("location_id", "default")
+
+    message = messaging.Message(
+        notification=messaging.Notification(
+            title="Wind Alarm!",
+            body=f"Wind at {location_id} is {base_wind} kts.",
+        ),
+        topic=topic,
+    )
+
+    try:
+        response = messaging.send(message)
+        logging.info("Successfully sent message: %s", response)
+        return {"notification_sent": True}
+    except Exception as exc:
+        logging.error("Failed to send FCM notification: %s", exc)
+        return {"notification_sent": False, "error_message": str(exc)}

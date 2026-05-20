@@ -4,6 +4,7 @@ Supports LangGraph (local) and Bedrock Agents (AWS) via WIND_ALARM_ORCHESTRATOR.
 """
 import argparse
 import os
+import time
 from wind_alarm.config import config
 
 
@@ -34,7 +35,6 @@ def main():
 
     print(f"Starting Wind Alarm Agent for {location_cfg['name']}")
 
-    import time
     while True:
         for url in location_cfg["urls"]:
             initial_state = WindGraphState(

@@ -39,7 +39,7 @@ def test_fetch_primary_source_success(mock_playwright):
     result = fetch_primary_source(state)
 
     assert result.get("fetch_status") == "success"
-    assert result.get("raw_payload") == "/tmp/webcam_screenshot.png"
+    assert result.get("raw_payload") == "debug/full_screenshot.png"
     assert result.get("error_message") == ""
     assert "fetched_at" in result
     mock_page.screenshot.assert_called_once()
@@ -153,8 +153,10 @@ def test_send_notification_skipped():
     assert result.get("notification_sent") is False
 
 
-def test_send_notification_sent():
+@patch("wind_alarm.nodes.messaging.send")
+def test_send_notification_sent(mock_send):
     """Test notification sent if threshold exceeded."""
+    mock_send.return_value = "mock_response"
     state = WindGraphState(threshold_exceeded=True)
     result = send_notification(state)
     assert result.get("notification_sent") is True
