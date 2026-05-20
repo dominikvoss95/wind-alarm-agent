@@ -6,8 +6,10 @@ on:
     # This covers the typical early morning "Pelér" wind window at Gardasee.
     - cron: '*/15 3-8 * * *'
   
-  # Allow manual triggering of the workflow from the GitHub UI
   workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   check-wind:
