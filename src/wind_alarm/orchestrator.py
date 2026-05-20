@@ -1,16 +1,13 @@
-"""
-Orchestrator abstraction layer.
-Switch between LangGraph (local) and Bedrock Agents (AWS) via env var.
-"""
 import os
+from wind_alarm.config import config
 from wind_alarm.state import WindGraphState
 
 
-ORCHESTRATOR_MODE = os.environ.get("WIND_ALARM_ORCHESTRATOR", "langgraph")
-
-
 def get_orchestrator():
-    if ORCHESTRATOR_MODE == "bedrock":
+    # Default to bedrock if USE_AWS is enabled
+    mode = "bedrock" if config.USE_AWS else os.environ.get("WIND_ALARM_ORCHESTRATOR", "langgraph")
+    
+    if mode == "bedrock":
         from wind_alarm.aws.bedrock_orchestrator import BedrockOrchestrator
         return BedrockOrchestrator()
     else:

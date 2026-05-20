@@ -20,4 +20,4 @@ echo "[3/3] Running bandit static analysis..."
 pip install -q bandit
 bandit -r src/ -x src/wind_alarm/fetcher.py,src/wind_alarm/extract_wind.py || true
 
-echo "=== Security Scan Complete ==="
+echo "=== Securitty Scan Complete ==="

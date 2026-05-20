@@ -8,8 +8,7 @@ from wind_alarm.config import config
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Initialize orchestrator outside the handler for warm starts
-# (This saves execution time and costs!)
+# Initialize orchestrator at module level to leverage Lambda warm starts
 orchestrator = get_orchestrator()
 
 def handler(event, context):

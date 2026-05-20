@@ -12,13 +12,14 @@ load_dotenv()
 class Config:
     """Central configuration class."""
     
-    # Project Paths
+    USE_AWS = os.environ.get("USE_AWS", "false").lower() == "true"
+    
+    # Filesystem Paths
     ROOT_DIR = Path(__file__).parent.parent.parent
     DEBUG_DIR = ROOT_DIR / "debug"
     RAW_IMAGE_DIR = ROOT_DIR / "data" / "raw" / "webcam"
     
-    # Firebase
-    # Default to serviceAccountKey.json in root if not specified otherwise
+    # Firebase settings
     FIREBASE_CREDENTIALS_PATH = os.environ.get(
         "FIREBASE_CREDENTIALS_PATH", 
         str(ROOT_DIR / "serviceAccountKey.json")
