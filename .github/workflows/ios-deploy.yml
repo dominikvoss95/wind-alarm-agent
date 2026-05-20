@@ -33,6 +33,10 @@ jobs:
           mkdir -p ~/private_keys
           echo "${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}" > ~/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8
 
+      - name: Inject Team ID into Xcode Project
+        run: |
+          sed -i '' "s/REPLACE_WITH_YOUR_TEAM_ID/${{ secrets.APPLE_TEAM_ID }}/g" app/ios/Runner.xcodeproj/project.pbxproj
+
       - name: Build Flutter iOS Release
         run: |
           cd app
