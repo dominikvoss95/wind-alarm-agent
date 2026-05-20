@@ -26,26 +26,39 @@ jobs:
           cd app
           flutter pub get
 
-      - name: Install Provisioning Profile
+      - name: Prepare App Store Connect API Key
         run: |
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "${{ secrets.PROVISIONING_PROFILE }}" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/distribution.mobileprovision
+          mkdir -p ~/private_keys
+          echo "${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}" > ~/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8
 
-      - name: Install Certificate
+      - name: Build Flutter iOS Release
         run: |
-          echo "${{ secrets.P12_CERTIFICATE }}" | base64 --decode > distribution.p12
-          security create-keychain -p "" build.keychain
-          security list-keychains -s build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "" build.keychain
-          security import distribution.p12 -k build.keychain -P "${{ secrets.P12_PASSWORD }}" -A -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
+          cd app
+          flutter build ios --release --no-codesign
 
-      - name: Build IPA
+      - name: Build and Sign Archive
+        run: |
+          xcodebuild archive \
+            -workspace app/ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath app/build/ios/archive/Runner.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
+            -authenticationKeyPath "$HOME/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8"
+
+      - name: Export IPA
         run: |
           sed -i '' "s/REPLACE_WITH_YOUR_TEAM_ID/${{ secrets.APPLE_TEAM_ID }}/g" app/ios/ExportOptions.plist
-          cd app
-          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+          xcodebuild -exportArchive \
+            -archivePath app/build/ios/archive/Runner.xcarchive \
+            -exportPath app/build/ios/ipa \
+            -exportOptionsPlist app/ios/ExportOptions.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
+            -authenticationKeyPath "$HOME/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8"
 
       - name: Upload to TestFlight
         uses: apple-actions/upload-testflight-build@v1
