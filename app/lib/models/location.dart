@@ -8,7 +8,7 @@ class LocationData {
   final String id;
   final String name;
   final String fcmTopic;
-  final IconData icon;
+  final FaIconData icon;
   final List<WebcamData> webcams;
   final Color accentColor;
   final String activeWindow;

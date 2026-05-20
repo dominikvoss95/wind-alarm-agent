@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../models/location.dart';
 import '../theme/app_theme.dart';
 import '../widgets/location_card.dart';
@@ -175,7 +176,7 @@ class _MainScreenState extends State<MainScreen> {
                         color: data.accentColor.withOpacity(0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(data.icon, color: data.accentColor, size: 20),
+                      child: FaIcon(data.icon, color: data.accentColor, size: 20),
                     ),
                     title: Text(
                       data.name,
