@@ -37,6 +37,9 @@ jobs:
         run: |
           sed -i '' "s/REPLACE_WITH_YOUR_TEAM_ID/${{ secrets.APPLE_TEAM_ID }}/g" app/ios/Runner.xcodeproj/project.pbxproj
 
+      - name: Disable Swift Package Manager
+        run: flutter config --no-enable-swift-package-manager
+
       - name: Build Flutter iOS Release
         run: |
           cd app
