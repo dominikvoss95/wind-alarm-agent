@@ -72,10 +72,14 @@ jobs:
             -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
             -authenticationKeyPath "$HOME/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8"
 
+      - name: Find IPA path
+        id: find_ipa
+        run: echo "ipa_path=$(find app/build/ios/ipa -name '*.ipa' | head -1)" >> $GITHUB_OUTPUT
+
       - name: Upload to TestFlight
         uses: apple-actions/upload-testflight-build@v1
         with:
-          app-path: 'app/build/ios/ipa/*.ipa'
+          app-path: ${{ steps.find_ipa.outputs.ipa_path }}
           issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           api-private-key: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}
