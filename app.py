@@ -33,19 +33,20 @@ def main():
         print(f"ERROR: {e}")
         return
 
+    from wind_alarm.aggregator import run_and_aggregate_measurements
+
     print(f"Starting Wind Alarm Agent for {location_cfg['name']}")
 
     while True:
-        for url in location_cfg["urls"]:
-            initial_state = WindGraphState(
-                source_identifier=url,
-                location_id=args.location,
-                target_fcm_topic=location_cfg["fcm_topic"],
-                threshold_knots=args.threshold,
-                freshness_limit_minutes=args.freshness,
-            )
-            result = orchestrator.invoke(initial_state)
-            print(f"  {url}: {result.get('base_wind_knots')} kts (exceeded: {result.get('threshold_exceeded')})")
+        result = run_and_aggregate_measurements(
+            location_id=args.location,
+            threshold=args.threshold,
+            freshness=args.freshness,
+            orchestrator=orchestrator,
+        )
+        print(f"Aggregation complete. Threshold exceeded: {result.get('threshold_exceeded')}")
+        for cam_id, info in result.get("webcams", {}).items():
+            print(f"  {cam_id}: {info.get('base_wind')} kts (fresh: {info.get('is_fresh')})")
 
         if not args.loop:
             break

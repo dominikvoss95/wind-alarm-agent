@@ -9,8 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from typing import Optional, Any
 from collections import defaultdict
 from threading import Lock
 
@@ -109,6 +109,7 @@ class MeasurementResponse(BaseModel):
     is_fresh: bool
     threshold_exceeded: bool
     error_message: str
+    webcams: Optional[dict[str, Any]] = None
     updated_at: str
 
 
@@ -148,6 +149,48 @@ async def get_measurement(location: str, _: str = Depends(verify_api_key)):
     return MeasurementResponse(location=location, **measurement)
 
 
+class HistoryItem(BaseModel):
+    observed_at: str
+    base_wind: float
+    gust: float
+
+
+@app.get("/measurements/{location}/history", response_model=list[HistoryItem])
+async def get_measurement_history(location: str, hours: int = 24, _: str = Depends(verify_api_key)):
+    if not location or not location.replace("_", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid location format")
+
+    from wind_alarm.config import config
+    if config.USE_AWS:
+        try:
+            from aws.knowledge_base import get_recent_measurements
+            items = get_recent_measurements(location, hours)
+            return [
+                HistoryItem(
+                    observed_at=item.get("observed_at"),
+                    base_wind=float(item.get("base_wind_knots", 0.0)),
+                    gust=float(item.get("gust_knots", 0.0)),
+                )
+                for item in items
+            ]
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch history from DynamoDB: {str(exc)}")
+    else:
+        # Local development mock history
+        now = datetime.now(timezone.utc)
+        mock_items = []
+        for i in range(12):
+            obs_time = now - timedelta(hours=i * 2)
+            mock_items.append(
+                HistoryItem(
+                    observed_at=obs_time.isoformat(),
+                    base_wind=5.0 + (i % 3) * 3.0,
+                    gust=8.0 + (i % 3) * 4.0,
+                )
+            )
+        return mock_items
+
+
 @app.get("/measurements", response_model=dict[str, MeasurementResponse])
 async def get_all_measurements(_: str = Depends(verify_api_key)):
     all_data = store.get_all_measurements()
@@ -167,32 +210,18 @@ async def trigger_measurement(
         raise HTTPException(status_code=400, detail="Invalid location format")
 
     from wind_alarm.graph import build_wind_alarm_graph
-    from wind_alarm.state import WindGraphState
-    from wind_alarm.config import config
-
-    location_cfg = config.LOCATIONS.get(location)
-    if not location_cfg:
-        raise HTTPException(status_code=404, detail=f"Unknown location: {location}")
+    from wind_alarm.aggregator import run_and_aggregate_measurements
 
     app_graph = build_wind_alarm_graph()
-    results = []
+    aggregated = run_and_aggregate_measurements(
+        location_id=location,
+        threshold=request.threshold,
+        freshness=request.freshness,
+        orchestrator=app_graph,
+    )
 
-    for url in location_cfg.get("urls", []):
-        state = WindGraphState(
-            source_identifier=url,
-            location_id=location,
-            target_fcm_topic=location_cfg["fcm_topic"],
-            threshold_knots=request.threshold,
-            freshness_limit_minutes=request.freshness,
-        )
-        result = app_graph.invoke(state)
-        results.append(result)
-
-    best = results[0]
-    for r in results:
-        if r.get("threshold_exceeded"):
-            best = r
-            break
-
-    store.set_measurement(location, best)
-    return {"location": location, "stored": True, "threshold_exceeded": best.get("threshold_exceeded", False)}
+    return {
+        "location": location,
+        "stored": True,
+        "threshold_exceeded": aggregated.get("threshold_exceeded", False),
+    }

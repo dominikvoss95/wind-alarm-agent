@@ -6,6 +6,7 @@ import '../models/location.dart';
 import '../theme/app_theme.dart';
 import '../widgets/wind_trend_chart.dart';
 import '../widgets/criteria_item.dart';
+import '../services/wind_api_service.dart';
 
 class LocationScreen extends StatefulWidget {
   final WindLocation location;
@@ -20,36 +21,53 @@ class _LocationScreenState extends State<LocationScreen> {
   Map<String, double> _windValues = {};
   Map<String, double> _gustValues = {};
   bool _snoozeIfCalm = true;
-  StreamSubscription<QuerySnapshot>? _measurementSubscription;
+  Timer? _pollingTimer;
 
   @override
   void initState() {
     super.initState();
-    _listenToFirestore();
+    _startPolling();
   }
 
-  void _listenToFirestore() {
+  void _startPolling() {
+    _fetchMeasurement();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      _fetchMeasurement();
+    });
+  }
+
+  List<WindHistoryItem> _history = [];
+
+  Future<void> _fetchMeasurement() async {
     final apiLocId = widget.location.name.toLowerCase();
-    _measurementSubscription = FirebaseFirestore.instance
-        .collection('latest_measurements')
-        .where('location_id', isEqualTo: apiLocId)
-        .snapshots()
-        .listen((snapshot) {
-      if (!mounted) return;
-      setState(() {
-        for (var doc in snapshot.docs) {
-          final data = doc.data() as Map<String, dynamic>;
-          final camId = data['cam_id'] as String;
-          _windValues[camId] = (data['base_wind'] ?? 0.0).toDouble();
-          _gustValues[camId] = (data['gust'] ?? 0.0).toDouble();
+    final measurement = await WindApiService.getMeasurement(apiLocId);
+    final historyData = await WindApiService.getHistory(apiLocId);
+    if (!mounted) return;
+    setState(() {
+      _history = historyData;
+      if (measurement != null) {
+        if (measurement.webcams != null) {
+          measurement.webcams!.forEach((camId, data) {
+            _windValues[camId] = (data['base_wind'] ?? 0.0).toDouble();
+            _gustValues[camId] = (data['gust'] ?? 0.0).toDouble();
+          });
+        } else {
+          final locData = appLocations[widget.location]!;
+          final firstCamId = locData.webcams.first.url
+              .replaceAll(RegExp(r'/+$'), '')
+              .split('/')
+              .last
+              .toLowerCase();
+          _windValues[firstCamId] = measurement.baseWind;
+          _gustValues[firstCamId] = measurement.gust;
         }
-      });
+      }
     });
   }
 
   @override
   void dispose() {
-    _measurementSubscription?.cancel();
+    _pollingTimer?.cancel();
     super.dispose();
   }
 
@@ -159,26 +177,28 @@ class _LocationScreenState extends State<LocationScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Text(
-                  "ÜBERWACHUNG AKTIV",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.accentTeal,
-                    letterSpacing: 1.0,
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: "ÜBERWACHUNG AKTIV",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: loc.accentColor,
+                      letterSpacing: 1.0,
+                    ),
                   ),
-                ),
-                Text(
-                  " • ${loc.activeWindow}",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.accentTeal.withOpacity(0.7),
+                  TextSpan(
+                    text: " • ${loc.activeWindow}",
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: loc.accentColor.withOpacity(0.7),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             const SizedBox(height: 32),
             _buildCurrentWindCard(loc, wind),
@@ -304,53 +324,60 @@ class _LocationScreenState extends State<LocationScreen> {
                   ),
                 ],
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    "QUELLE",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textMuted,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    webcam.sourceDomain,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: const BoxDecoration(color: AppColors.statusGreen, shape: BoxShape.circle),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      "QUELLE",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textMuted,
+                        letterSpacing: 1.0,
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        "LIVE-DATEN",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.statusGreen,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      webcam.sourceDomain,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(color: AppColors.statusGreen, shape: BoxShape.circle),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                        const SizedBox(width: 6),
+                        Text(
+                          "LIVE-DATEN",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.statusGreen,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
           const SizedBox(height: 32),
           WindTrendChart(
-            data: _generateTrendData(wind),
+            data: _history.isNotEmpty
+                ? _history.take(12).toList().reversed.map((e) => e.baseWind).toList()
+                : _generateTrendData(wind),
             height: 80,
             barColor: loc.accentColor,
           ),

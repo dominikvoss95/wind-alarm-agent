@@ -49,8 +49,8 @@ final Map<WindLocation, LocationData> appLocations = {
     fcmTopic: 'wind_alarms_kochelsee',
     icon: FontAwesomeIcons.mountainCity,
     accentColor: AppColors.accentTeal,
-    activeWindow: '04:00 - 07:00',
-    nextCheck: '04:20',
+    activeWindow: '05:00 - 07:00',
+    nextCheck: 'alle 5 Min.',
     defaultDirection: 'SW',
     heroImageUrl: 'assets/images/kochelsee.png',
     webcams: [
@@ -67,8 +67,8 @@ final Map<WindLocation, LocationData> appLocations = {
     fcmTopic: 'wind_alarms_gardasee',
     icon: FontAwesomeIcons.water,
     accentColor: AppColors.accentCyan,
-    activeWindow: '05:00 - 09:00',
-    nextCheck: '05:30',
+    activeWindow: '05:00 - 07:00',
+    nextCheck: 'alle 5 Min.',
     defaultDirection: 'N',
     heroImageUrl: 'assets/images/gardasee.png',
     webcams: [

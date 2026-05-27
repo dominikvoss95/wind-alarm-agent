@@ -39,7 +39,7 @@ def test_fetch_primary_source_success(mock_playwright):
     result = fetch_primary_source(state)
 
     assert result.get("fetch_status") == "success"
-    assert result.get("raw_payload") == "debug/full_screenshot.png"
+    assert result.get("raw_payload", "").endswith("debug/full_screenshot.png")
     assert result.get("error_message") == ""
     assert "fetched_at" in result
     mock_page.screenshot.assert_called_once()
@@ -52,8 +52,8 @@ def test_parse_primary_source_skipped():
     assert result.get("parse_status") == "skipped"
 
 
-@patch("wind_alarm.nodes.easyocr.Reader")
-@patch("wind_alarm.nodes.cv2.imread")
+@patch("easyocr.Reader")
+@patch("cv2.imread")
 def test_parse_primary_source_success(mock_imread, mock_reader_cls):
     """Test successful parse of valid payload."""
     mock_imread.return_value = MagicMock()
@@ -81,7 +81,7 @@ def test_parse_primary_source_success(mock_imread, mock_reader_cls):
     assert result.get("gust_knots") == 16.0
 
 
-@patch("wind_alarm.nodes.cv2.imread")
+@patch("cv2.imread")
 def test_parse_primary_source_invalid_image(mock_imread):
     """Test parse failure on valid fetch but missing image."""
     mock_imread.return_value = None

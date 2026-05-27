@@ -1,7 +1,46 @@
 FROM public.ecr.aws/lambda/python:3.12
-RUN pip install -r requirements.txt
+
+# Install system dependencies required by Chromium under Amazon Linux 2023
+RUN dnf install -y \
+    alsa-lib \
+    atk \
+    at-spi2-atk \
+    at-spi2-core \
+    cups-libs \
+    gtk3 \
+    libdrm \
+    libXcomposite \
+    libXcursor \
+    libXdamage \
+    libXext \
+    libXi \
+    libxkbcommon \
+    libXrandr \
+    libXScrnSaver \
+    libXtst \
+    mesa-libgbm \
+    nss \
+    nspr \
+    pango \
+    xorg-x11-fonts-Type1 \
+    xorg-x11-fonts-misc \
+    xorg-x11-server-Xvfb \
+    && dnf clean all
+
+COPY requirements.lambda.txt ${LAMBDA_TASK_ROOT}/
+RUN pip install --no-cache-dir -r ${LAMBDA_TASK_ROOT}/requirements.lambda.txt
+
+# Configure Playwright paths and flags
+ENV PLAYWRIGHT_BROWSERS_PATH=/var/task/ms-playwright
+ENV PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
+ENV HOME=/tmp
+
+# Download the Chromium binary to the baked path
+RUN playwright install chromium
+
 # Copy src content to the root package
 COPY src/wind_alarm/ ${LAMBDA_TASK_ROOT}/wind_alarm/
+COPY src/aws/ ${LAMBDA_TASK_ROOT}/aws/
 COPY app.py ${LAMBDA_TASK_ROOT}/
 
 ENV PYTHONPATH=${LAMBDA_TASK_ROOT}

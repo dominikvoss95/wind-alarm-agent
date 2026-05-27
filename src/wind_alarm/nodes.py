@@ -6,11 +6,10 @@ import re
 import time
 from datetime import datetime, timezone
 
-import cv2
-import easyocr
 from playwright.sync_api import sync_playwright
 from firebase_admin import messaging
 
+from wind_alarm.config import config
 from wind_alarm.state import WindGraphState
 
 
@@ -26,7 +25,7 @@ def fetch_primary_source(state: WindGraphState) -> WindGraphState:
         }
 
     now = datetime.now(timezone.utc).isoformat()
-    screenshot_path = "debug/full_screenshot.png"
+    screenshot_path = str(config.DEBUG_DIR / "full_screenshot.png")
 
     ad_patterns = [
         "*doubleclick.net*", "*googlesyndication*", "*googleadservices*",
@@ -38,7 +37,10 @@ def fetch_primary_source(state: WindGraphState) -> WindGraphState:
 
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
+            browser = playwright.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--single-process"]
+            )
             context = browser.new_context(viewport={"width": 1280, "height": 960})
             page = context.new_page()
 
@@ -109,8 +111,9 @@ def fetch_primary_source(state: WindGraphState) -> WindGraphState:
 _CACHE = {}
 
 
-def _get_reader() -> easyocr.Reader:
+def _get_reader():
     """Lazily load the easyOCR reader."""
+    import easyocr
     if "reader" not in _CACHE:
         _CACHE["reader"] = easyocr.Reader(["en", "de"])
     return _CACHE["reader"]
@@ -118,10 +121,10 @@ def _get_reader() -> easyocr.Reader:
 
 def parse_primary_source(state: WindGraphState) -> WindGraphState:
     """
-    Parse the raw payload (screenshot) and extract observed wind values using OCR.
+    Parse the raw payload (screenshot) and extract observed wind values using OCR (local EasyOCR or Bedrock).
     """
     if state.get("fetch_status") != "success":
-        return {"parse_status": "skipped", "error_message": "Fetch was not successful"}
+        return {"parse_status": "skipped"}
 
     img_path = state.get("raw_payload", "")
 
@@ -136,36 +139,105 @@ def parse_primary_source(state: WindGraphState) -> WindGraphState:
     else:
         observed_at = state.get("fetched_at")
 
-    try:
-        img = cv2.imread(img_path)
-        if img is None:
+    if config.USE_AWS:
+        # Use AWS Bedrock (Nova Lite) to extract the wind information from the screenshot
+        try:
+            import boto3
+            import json
+            import os
+
+            # Always call Bedrock in a region where Nova Lite is enabled (defaulting to us-east-1)
+            bedrock_region = os.environ.get("BEDROCK_REGION", "us-east-1")
+            client = boto3.client("bedrock-runtime", region_name=bedrock_region)
+
+            with open(img_path, "rb") as f:
+                image_bytes = f.read()
+
+            prompt = (
+                "Read this webcam screenshot overlay. Extract the wind speed (Wind) and gust speed (Böen) in knots (kts). "
+                "Return a JSON object with keys \"wind\" and \"gust\" as integers. Do not write any other text or explanation. "
+                "Example response: {\"wind\": 15, \"gust\": 22}"
+            )
+
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"text": prompt},
+                        {
+                            "image": {
+                                "format": "png",
+                                "source": {"bytes": image_bytes}
+                            }
+                        }
+                    ]
+                }
+            ]
+
+            model_id = os.environ.get("BEDROCK_OCR_MODEL_ID", "amazon.nova-lite-v1:0")
+            response = client.converse(
+                modelId=model_id,
+                messages=messages,
+                inferenceConfig={"maxTokens": 100, "temperature": 0.0}
+            )
+
+            response_text = response['output']['message']['content'][0]['text']
+            
+            # Find JSON block
+            json_match = re.search(r"\{.*?\}", response_text, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group(0))
+                base_wind = float(data.get("wind", 0.0))
+                gust = float(data.get("gust", 0.0))
+            else:
+                raise ValueError(f"Could not parse JSON from Bedrock response: {response_text}")
+
+            return {
+                "parse_status": "success",
+                "observed_at": observed_at,
+                "base_wind_knots": base_wind,
+                "gust_knots": gust,
+                "error_message": ""
+            }
+        except Exception as exc:
             return {
                 "parse_status": "failed",
-                "error_message": "Failed to read screenshot image"
+                "error_message": f"Bedrock OCR extraction failed: {str(exc)}"
             }
 
-        reader = _get_reader()
-        results = reader.readtext(img)
-        full_text = " ".join(text for _, text, _ in results)
+    else:
+        # Local Mode using EasyOCR and OpenCV
+        try:
+            import cv2
+            img = cv2.imread(img_path)
+            if img is None:
+                return {
+                    "parse_status": "failed",
+                    "error_message": "Failed to read screenshot image"
+                }
 
-        wind_match = re.search(r"Wind:?\s*(\d+)\s*kts?", full_text, re.IGNORECASE)
-        gust_match = re.search(r"B[öo]en:?\s*(\d+)\s*kts?", full_text, re.IGNORECASE)
+            reader = _get_reader()
+            results = reader.readtext(img)
+            full_text = " ".join(text for _, text, _ in results)
 
-        base_wind = float(wind_match.group(1)) if wind_match else 0.0
-        gust = float(gust_match.group(1)) if gust_match else 0.0
+            wind_match = re.search(r"Wind:?\s*(\d+)\s*kts?", full_text, re.IGNORECASE)
+            gust_match = re.search(r"B[öo]en:?\s*(\d+)\s*kts?", full_text, re.IGNORECASE)
 
-        return {
-            "parse_status": "success",
-            "observed_at": observed_at,
-            "base_wind_knots": base_wind,
-            "gust_knots": gust,
-            "error_message": ""
-        }
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        return {
-            "parse_status": "failed",
-            "error_message": f"OCR extraction failed: {str(exc)}"
-        }
+            base_wind = float(wind_match.group(1)) if wind_match else 0.0
+            gust = float(gust_match.group(1)) if gust_match else 0.0
+
+            return {
+                "parse_status": "success",
+                "observed_at": observed_at,
+                "base_wind_knots": base_wind,
+                "gust_knots": gust,
+                "error_message": ""
+            }
+        except Exception as exc:
+            return {
+                "parse_status": "failed",
+                "error_message": f"OCR extraction failed: {str(exc)}"
+            }
 
 
 def check_freshness(state: WindGraphState) -> WindGraphState:
@@ -173,7 +245,7 @@ def check_freshness(state: WindGraphState) -> WindGraphState:
     Validate that the reading is recent enough.
     """
     if state.get("parse_status") != "success":
-        return {"is_fresh": False, "error_message": "Parse was not successful"}
+        return {"is_fresh": False}
 
     observed_at_str = state.get("observed_at")
     limit_minutes = state.get("freshness_limit_minutes", 60)
@@ -220,7 +292,7 @@ def send_notification(state: WindGraphState) -> WindGraphState:
     """
     Trigger notification only when all required conditions are met.
     """
-    if not state.get("threshold_exceeded"):
+    if state.get("skip_notification") or not state.get("threshold_exceeded"):
         return {"notification_sent": False}
 
     topic = state.get("target_fcm_topic", "wind_alarms")
@@ -232,6 +304,11 @@ def send_notification(state: WindGraphState) -> WindGraphState:
             title="Wind Alarm!",
             body=f"Wind at {location_id} is {base_wind} kts.",
         ),
+        data={
+            "action": "schedule_alarm",
+            "location": location_id,
+            "wind": str(base_wind),
+        },
         topic=topic,
     )
 

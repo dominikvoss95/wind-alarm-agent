@@ -5,7 +5,7 @@ import '../theme/app_theme.dart';
 
 class LocationOverviewCard extends StatelessWidget {
   final LocationData location;
-  final double currentWind;
+  final double? currentWind;
   final String status;
   final bool isArmed;
   final Function(bool) onArmedChanged;
@@ -23,6 +23,8 @@ class LocationOverviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasData = currentWind != null;
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -82,7 +84,7 @@ class LocationOverviewCard extends StatelessWidget {
                 textBaseline: TextBaseline.alphabetic,
                 children: [
                   Text(
-                    currentWind.toInt().toString(),
+                    hasData ? currentWind!.toInt().toString() : "-",
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 72,
                       fontWeight: FontWeight.w800,
@@ -91,15 +93,17 @@ class LocationOverviewCard extends StatelessWidget {
                       height: 1,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    "kts",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textMuted,
+                  if (hasData) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      "kts",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textMuted,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -121,14 +125,20 @@ class LocationOverviewCard extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.verified_user, color: AppColors.accentCyan, size: 16),
+                  Icon(
+                    hasData ? Icons.verified_user : Icons.snooze_rounded,
+                    color: hasData ? AppColors.accentCyan : AppColors.textMuted,
+                    size: 16,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      "Agent hat Quellen geprüft. Wind ist stabil.",
+                      hasData
+                          ? "Agent hat Quellen geprüft. Wind ist stabil."
+                          : "Warten auf das nächste Überwachungsfenster.",
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
-                        color: AppColors.accentCyan.withOpacity(0.8),
+                        color: (hasData ? AppColors.accentCyan : AppColors.textMuted).withOpacity(0.8),
                         fontWeight: FontWeight.w500,
                       ),
                     ),

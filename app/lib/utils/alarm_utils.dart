@@ -24,7 +24,7 @@ Future<void> triggerAlarmLogic({int hour = 6, int minute = 0, String locationNam
         presentSound: true,
         presentAlert: true,
         interruptionLevel: InterruptionLevel.critical,
-        sound: 'default',
+        sound: 'alarm_sound.mp3',
       ),
     );
     await flutterLocalNotificationsPlugin.show(

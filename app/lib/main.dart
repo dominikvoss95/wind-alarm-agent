@@ -14,7 +14,13 @@ import 'utils/alarm_utils.dart';
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   if (message.data['action'] == 'schedule_alarm') {
-    await triggerAlarmLogic();
+    final locationName = message.data['location'] ?? 'KOCHELSEE';
+    final now = DateTime.now();
+    await triggerAlarmLogic(
+      locationName: locationName.toUpperCase(),
+      hour: now.hour,
+      minute: now.minute,
+    );
   }
 }
 

@@ -4,10 +4,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../models/location.dart';
 import '../theme/app_theme.dart';
 import '../widgets/location_card.dart';
 import 'location_screen.dart';
+import '../utils/alarm_utils.dart';
+import '../services/wind_api_service.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -19,39 +22,61 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   final List<bool> _isMonitoringArmed = [true, false]; // Kochelsee, Gardasee
-  final Map<String, double> _liveWindSummary = {};
-  final List<StreamSubscription> _subscriptions = [];
+  final Map<String, WindMeasurement> _liveWindSummary = {};
+  Timer? _pollingTimer;
+
+  Future<void> _toggleMonitoring(int index, bool isArmed, LocationData data) async {
+    setState(() {
+      _isMonitoringArmed[index] = isArmed;
+    });
+
+    try {
+      if (isArmed) {
+        await FirebaseMessaging.instance.subscribeToTopic(data.fcmTopic);
+        debugPrint("Subscribed to topic: ${data.fcmTopic}");
+      } else {
+        await FirebaseMessaging.instance.unsubscribeFromTopic(data.fcmTopic);
+        debugPrint("Unsubscribed from topic: ${data.fcmTopic}");
+      }
+    } catch (e) {
+      debugPrint("Error updating topic subscription: $e");
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     print("DEBUG: MainScreen initState");
-    _initFirestoreListeners();
+    _startPolling();
   }
 
-  void _initFirestoreListeners() {
-    for (var loc in WindLocation.values) {
-      final sub = FirebaseFirestore.instance
-          .collection('latest_measurements')
-          .where('location_id', isEqualTo: loc.name.toLowerCase())
-          .snapshots()
-          .listen((snapshot) {
-        if (!mounted || snapshot.docs.isEmpty) return;
-        setState(() {
-          // Simplification: use first cam found for home screen summary
-          final data = snapshot.docs.first.data();
-          _liveWindSummary[loc.name] = (data['base_wind'] ?? 0.0).toDouble();
-        });
+  void _startPolling() {
+    _fetchMeasurements();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      _fetchMeasurements();
+    });
+  }
+
+  Future<void> _fetchMeasurements() async {
+    final measurements = await WindApiService.getAllMeasurements();
+    if (!mounted) return;
+    setState(() {
+      measurements.forEach((key, measurement) {
+        if (measurement != null) {
+          try {
+            final loc = WindLocation.values.firstWhere(
+              (l) => l.name.toLowerCase() == key.toLowerCase()
+            );
+            _liveWindSummary[loc.name] = measurement;
+          } catch (_) {}
+        }
       });
-      _subscriptions.add(sub);
-    }
+    });
   }
 
   @override
   void dispose() {
-    for (var sub in _subscriptions) {
-      sub.cancel();
-    }
+    _pollingTimer?.cancel();
     super.dispose();
   }
 
@@ -118,14 +143,19 @@ class _MainScreenState extends State<MainScreen> {
             final index = entry.key;
             final loc = entry.value;
             final data = appLocations[loc]!;
-            final wind = _liveWindSummary[loc.name] ?? (index == 0 ? 18.0 : 4.0);
+            final measurement = _liveWindSummary[loc.name];
+            final isFresh = measurement != null && measurement.isCurrentlyFresh;
+            final wind = isFresh ? measurement.baseWind : null;
+            final status = isFresh
+                ? (index == 0 ? "Steigt stetig" : "Nächster Check • ${data.nextCheck}")
+                : "Überwachungsfenster inaktiv";
             
             return LocationOverviewCard(
               location: data,
               currentWind: wind,
-              status: index == 0 ? "Steigt stetig" : "Nächster Check • ${data.nextCheck}",
+              status: status,
               isArmed: _isMonitoringArmed[index],
-              onArmedChanged: (val) => setState(() => _isMonitoringArmed[index] = val),
+              onArmedChanged: (val) => _toggleMonitoring(index, val, data),
               onTap: () => Navigator.push(
                 context, 
                 MaterialPageRoute(builder: (_) => LocationScreen(location: loc))
@@ -224,15 +254,129 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildSettingsTab() {
-    return Center(
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.settings_outlined, size: 64, color: AppColors.textMuted.withOpacity(0.5)),
-          const SizedBox(height: 16),
           Text(
-            "Einstellungen",
-            style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
+            "Setup & Test",
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 32,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+              letterSpacing: -1,
+            ),
+          ),
+          const SizedBox(height: 48),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.backgroundCard,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.subtleBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentTeal.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.notifications_active_rounded, color: AppColors.accentTeal, size: 24),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Kritischer Alarm",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "Testet die Benachrichtigungen auf deinem iPhone, die auch im Stummmodus klingeln.",
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accentTeal.withOpacity(0.15),
+                      foregroundColor: AppColors.accentTeal,
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: const BorderSide(color: AppColors.accentTeal, width: 1.5),
+                      ),
+                    ),
+                    onPressed: () async {
+                      await triggerAlarmLogic(
+                        hour: 6,
+                        minute: 15,
+                        locationName: "KOCHELSEE",
+                      );
+                    },
+                    child: Text(
+                      "Kochelsee-Alarm auslösen",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accentMint.withOpacity(0.15),
+                      foregroundColor: AppColors.accentMint,
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: const BorderSide(color: AppColors.accentMint, width: 1.5),
+                      ),
+                    ),
+                    onPressed: () async {
+                      await triggerAlarmLogic(
+                        hour: 8,
+                        minute: 45,
+                        locationName: "GARDASEE",
+                      );
+                    },
+                    child: Text(
+                      "Gardasee-Alarm auslösen",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

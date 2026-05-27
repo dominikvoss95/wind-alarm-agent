@@ -27,6 +27,7 @@ def set_measurement(location: str, data: dict) -> None:
             "is_fresh": data.get("is_fresh", False),
             "threshold_exceeded": data.get("threshold_exceeded", False),
             "error_message": data.get("error_message", ""),
+            "webcams": data.get("webcams", {}),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 

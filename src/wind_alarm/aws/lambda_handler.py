@@ -27,28 +27,22 @@ def handler(event, context):
         logger.error(error_msg)
         return {"statusCode": 400, "body": error_msg}
 
-    results = []
-    for url in location_cfg["urls"]:
-        initial_state = WindGraphState(
-            source_identifier=url,
-            location_id=location_id,
-            target_fcm_topic=location_cfg["fcm_topic"],
-            threshold_knots=threshold,
-            freshness_limit_minutes=int(os.environ.get("FRESHNESS_LIMIT", 60)),
-        )
-        
-        try:
-            result = orchestrator.invoke(initial_state)
-            results.append({
-                "url": url,
-                "wind": result.get("base_wind_knots"),
-                "exceeded": result.get("threshold_exceeded")
-            })
-        except Exception as e:
-            logger.error("Error processing %s: %s", url, str(e))
-            results.append({"url": url, "error": str(e)})
+    from wind_alarm.aggregator import run_and_aggregate_measurements
 
-    return {
-        "statusCode": 200,
-        "body": results
-    }
+    try:
+        aggregated_data = run_and_aggregate_measurements(
+            location_id=location_id,
+            threshold=threshold,
+            freshness=int(os.environ.get("FRESHNESS_LIMIT", 60)),
+            orchestrator=orchestrator,
+        )
+        return {
+            "statusCode": 200,
+            "body": aggregated_data
+        }
+    except Exception as e:
+        logger.error("Error in aggregation execution: %s", str(e))
+        return {
+            "statusCode": 500,
+            "body": {"error": str(e)}
+        }

@@ -15,9 +15,16 @@ class Config:
     USE_AWS = os.environ.get("USE_AWS", "false").lower() == "true"
     
     # Filesystem Paths
-    ROOT_DIR = Path(__file__).parent.parent.parent
-    DEBUG_DIR = ROOT_DIR / "debug"
-    RAW_IMAGE_DIR = ROOT_DIR / "data" / "raw" / "webcam"
+    IS_LAMBDA = bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME") or os.environ.get("LAMBDA_TASK_ROOT"))
+    if IS_LAMBDA:
+        ROOT_DIR = Path(os.environ.get("LAMBDA_TASK_ROOT", "/var/task"))
+        WRITE_ROOT = Path("/tmp")
+    else:
+        ROOT_DIR = Path(__file__).parent.parent.parent
+        WRITE_ROOT = ROOT_DIR
+
+    DEBUG_DIR = WRITE_ROOT / "debug"
+    RAW_IMAGE_DIR = WRITE_ROOT / "data" / "raw" / "webcam"
     
     # Firebase settings
     FIREBASE_CREDENTIALS_PATH = os.environ.get(

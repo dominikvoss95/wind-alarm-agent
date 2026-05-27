@@ -32,4 +32,8 @@ data/
 
 # AWS and Cloud CLI
 .aws/
+
+# Terraform
+.terraform/
 terraform.tfstate*
+*.tfstate*
