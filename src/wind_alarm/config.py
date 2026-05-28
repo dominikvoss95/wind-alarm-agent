@@ -72,6 +72,27 @@ class Config:
         }
         return mapping.get(key, default)
 
+    def initialize_firebase(self):
+        """Lazily initialize Firebase Admin SDK."""
+        import firebase_admin
+        from firebase_admin import credentials
+        try:
+            firebase_admin.get_app()
+        except ValueError:
+            import os
+            import logging
+            logging.info("Initializing Firebase Admin SDK. Credentials path: %s", self.FIREBASE_CREDENTIALS_PATH)
+            if os.path.exists(self.FIREBASE_CREDENTIALS_PATH):
+                logging.info("Credentials file found. Initializing with certificate.")
+                cred = credentials.Certificate(self.FIREBASE_CREDENTIALS_PATH)
+                firebase_admin.initialize_app(cred)
+            else:
+                dir_path = os.path.dirname(self.FIREBASE_CREDENTIALS_PATH)
+                contents = os.listdir(dir_path) if os.path.exists(dir_path) else []
+                logging.warning("Credentials file not found at %s. Directory contents: %s", self.FIREBASE_CREDENTIALS_PATH, contents)
+                firebase_admin.initialize_app()
+
+
 # Create singleton instance
 config = Config()
 

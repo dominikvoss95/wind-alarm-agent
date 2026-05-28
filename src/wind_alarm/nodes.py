@@ -313,6 +313,7 @@ def send_notification(state: WindGraphState) -> WindGraphState:
     )
 
     try:
+        config.initialize_firebase()
         response = messaging.send(message)
         logging.info("Successfully sent message: %s", response)
         return {"notification_sent": True}

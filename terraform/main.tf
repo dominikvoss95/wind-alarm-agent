@@ -154,7 +154,7 @@ resource "aws_lambda_function" "wind_alarm" {
   package_type  = "Image"
   image_uri     = "${aws_ecr_repository.app.repository_url}:latest"
   timeout       = 300
-  memory_size   = 512
+  memory_size   = 2048
 
   environment {
     variables = {
@@ -173,10 +173,24 @@ resource "aws_cloudwatch_event_rule" "morning_check" {
   schedule_expression = "cron(*/5 3-4 * * ? *)"
 }
 
-resource "aws_cloudwatch_event_target" "trigger_lambda" {
+resource "aws_cloudwatch_event_target" "trigger_kochelsee" {
   rule      = aws_cloudwatch_event_rule.morning_check.name
-  target_id = "WindAlarmLambda"
+  target_id = "WindAlarmKochelsee"
   arn       = aws_lambda_function.wind_alarm.arn
+  input     = jsonencode({
+    location  = "kochelsee"
+    threshold = 10.0
+  })
+}
+
+resource "aws_cloudwatch_event_target" "trigger_gardasee" {
+  rule      = aws_cloudwatch_event_rule.morning_check.name
+  target_id = "WindAlarmGardasee"
+  arn       = aws_lambda_function.wind_alarm.arn
+  input     = jsonencode({
+    location  = "gardasee"
+    threshold = 12.0
+  })
 }
 
 resource "aws_lambda_permission" "allow_cloudwatch" {

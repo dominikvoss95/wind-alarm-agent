@@ -38,10 +38,10 @@ ENV HOME=/tmp
 # Download the Chromium binary to the baked path
 RUN playwright install chromium
 
-# Copy src content to the root package
 COPY src/wind_alarm/ ${LAMBDA_TASK_ROOT}/wind_alarm/
 COPY src/aws/ ${LAMBDA_TASK_ROOT}/aws/
 COPY app.py ${LAMBDA_TASK_ROOT}/
+COPY serviceAccountKey.json* ${LAMBDA_TASK_ROOT}/
 
 ENV PYTHONPATH=${LAMBDA_TASK_ROOT}
 

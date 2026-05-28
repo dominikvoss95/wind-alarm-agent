@@ -116,6 +116,7 @@ def _send_notification_if_triggered(
     )
 
     try:
+        config.initialize_firebase()
         response = messaging.send(message)
         logging.info("Successfully sent consolidated notification: %s", response)
         return True
