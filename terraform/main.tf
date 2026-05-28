@@ -201,7 +201,43 @@ resource "aws_lambda_permission" "allow_cloudwatch" {
   source_arn    = aws_cloudwatch_event_rule.morning_check.arn
 }
 
+# EventBridge rule for daily forecast check at 12:00 CEST (10:00 UTC)
+resource "aws_cloudwatch_event_rule" "forecast_check" {
+  name                = "wind-alarm-forecast-check"
+  description         = "Triggers daily wind forecast at 12:00 CEST (10:00 UTC)"
+  schedule_expression = "cron(0 10 * * ? *)"
+}
+
+resource "aws_cloudwatch_event_target" "forecast_kochelsee" {
+  rule      = aws_cloudwatch_event_rule.forecast_check.name
+  target_id = "WindForecastKochelsee"
+  arn       = aws_lambda_function.wind_alarm.arn
+  input     = jsonencode({
+    action   = "forecast"
+    location = "kochelsee"
+  })
+}
+
+resource "aws_cloudwatch_event_target" "forecast_gardasee" {
+  rule      = aws_cloudwatch_event_rule.forecast_check.name
+  target_id = "WindForecastGardasee"
+  arn       = aws_lambda_function.wind_alarm.arn
+  input     = jsonencode({
+    action   = "forecast"
+    location = "gardasee"
+  })
+}
+
+resource "aws_lambda_permission" "allow_forecast_cloudwatch" {
+  statement_id  = "AllowForecastExecutionFromCloudWatch"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.wind_alarm.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.forecast_check.arn
+}
+
 output "s3_bucket_url" {
   value       = "https://${aws_s3_bucket.web_assets.bucket_regional_domain_name}"
   description = "The public URL of the S3 bucket hosting wind measurements"
 }
+

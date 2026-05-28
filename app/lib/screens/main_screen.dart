@@ -43,11 +43,25 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  final Map<String, WindForecast> _forecastSummary = {};
+
   @override
   void initState() {
     super.initState();
     print("DEBUG: MainScreen initState");
+    _fetchForecasts();
     _startPolling();
+  }
+
+  Future<void> _fetchForecasts() async {
+    for (var loc in WindLocation.values) {
+      final forecast = await WindApiService.getForecast(loc.name.toLowerCase());
+      if (forecast != null && mounted) {
+        setState(() {
+          _forecastSummary[loc.name] = forecast;
+        });
+      }
+    }
   }
 
   void _startPolling() {
@@ -156,6 +170,7 @@ class _MainScreenState extends State<MainScreen> {
               status: status,
               isArmed: _isMonitoringArmed[index],
               onArmedChanged: (val) => _toggleMonitoring(index, val, data),
+              forecast: _forecastSummary[loc.name],
               onTap: () => Navigator.push(
                 context, 
                 MaterialPageRoute(builder: (_) => LocationScreen(location: loc))

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/location.dart';
 import '../theme/app_theme.dart';
+import '../services/wind_api_service.dart';
 
 class LocationOverviewCard extends StatelessWidget {
   final LocationData location;
@@ -10,6 +11,7 @@ class LocationOverviewCard extends StatelessWidget {
   final bool isArmed;
   final Function(bool) onArmedChanged;
   final VoidCallback onTap;
+  final WindForecast? forecast;
 
   const LocationOverviewCard({
     super.key,
@@ -19,6 +21,7 @@ class LocationOverviewCard extends StatelessWidget {
     required this.isArmed,
     required this.onArmedChanged,
     required this.onTap,
+    this.forecast,
   });
 
   @override
@@ -116,6 +119,30 @@ class LocationOverviewCard extends StatelessWidget {
                 color: AppColors.textSecondary,
               ),
             ),
+            if (forecast != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    Icons.psychology_rounded,
+                    color: location.accentColor,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      "${forecast!.windProbabilityPercent}% Windchance • ${forecast!.expectedWindMin}-${forecast!.expectedWindMax} kts ${forecast!.expectedDirection}",
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: location.accentColor,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 24),
             Container(
               padding: const EdgeInsets.all(16),

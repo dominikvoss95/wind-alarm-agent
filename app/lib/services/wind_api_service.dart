@@ -183,6 +183,27 @@ class WindApiService {
       return [];
     }
   }
+
+  static Future<WindForecast?> getForecast(String location) async {
+    try {
+      if (_useStaticS3) {
+        final response = await http.get(
+          Uri.parse('$_s3BucketUrl/forecast.json'),
+        ).timeout(const Duration(seconds: 5));
+
+        if (response.statusCode == 200) {
+          final Map<String, dynamic> json = jsonDecode(response.body);
+          if (json.containsKey(location)) {
+            return WindForecast.fromJson(json[location]);
+          }
+        }
+        return null;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
 }
 
 class WindHistoryItem {
@@ -201,6 +222,68 @@ class WindHistoryItem {
       observedAt: DateTime.parse(json['observed_at']).toLocal(),
       baseWind: (json['base_wind'] ?? 0.0).toDouble(),
       gust: (json['gust'] ?? 0.0).toDouble(),
+    );
+  }
+}
+
+class WindForecast {
+  final String summary;
+  final int windProbabilityPercent;
+  final String confidence; // 'high', 'medium', 'low'
+  final int expectedWindMin;
+  final int expectedWindMax;
+  final String expectedDirection;
+  final String bestTimeWindow;
+  final String modelConsensus;
+  final List<ForecastSource> sourcesAnalyzed;
+  final String updatedAt;
+
+  WindForecast({
+    required this.summary,
+    required this.windProbabilityPercent,
+    required this.confidence,
+    required this.expectedWindMin,
+    required this.expectedWindMax,
+    required this.expectedDirection,
+    required this.bestTimeWindow,
+    required this.modelConsensus,
+    required this.sourcesAnalyzed,
+    required this.updatedAt,
+  });
+
+  factory WindForecast.fromJson(Map<String, dynamic> json) {
+    var sourcesList = json['sources_analyzed'] as List? ?? [];
+    List<ForecastSource> parsedSources = sourcesList
+        .map((s) => ForecastSource.fromJson(s as Map<String, dynamic>))
+        .toList();
+
+    var windKnots = json['expected_wind_knots'] as Map<String, dynamic>? ?? {};
+
+    return WindForecast(
+      summary: json['summary'] ?? '',
+      windProbabilityPercent: json['wind_probability_percent'] ?? 0,
+      confidence: json['confidence'] ?? 'low',
+      expectedWindMin: (windKnots['min'] ?? 0).toInt(),
+      expectedWindMax: (windKnots['max'] ?? 0).toInt(),
+      expectedDirection: json['expected_direction'] ?? '',
+      bestTimeWindow: json['best_time_window'] ?? '',
+      modelConsensus: json['model_consensus'] ?? '',
+      sourcesAnalyzed: parsedSources,
+      updatedAt: json['updated_at'] ?? '',
+    );
+  }
+}
+
+class ForecastSource {
+  final String name;
+  final String summary;
+
+  ForecastSource({required this.name, required this.summary});
+
+  factory ForecastSource.fromJson(Map<String, dynamic> json) {
+    return ForecastSource(
+      name: json['name'] ?? '',
+      summary: json['summary'] ?? '',
     );
   }
 }

@@ -86,6 +86,36 @@ def update_s3_measurements(location_id: str, aggregated_data: dict) -> None:
         logging.error("Failed to write %s to S3: %s", key, exc)
 
 
+def update_s3_forecast(location_id: str, forecast_data: dict) -> None:
+    if not bucket_name:
+        logging.warning("WIND_ALARM_BUCKET environment variable is not set")
+        return
+
+    s3 = boto3.client("s3")
+    key = "forecast.json"
+
+    current_data = {}
+    try:
+        response = s3.get_object(Bucket=bucket_name, Key=key)
+        current_data = json.loads(response["Body"].read().decode("utf-8"))
+    except Exception as exc:
+        logging.info("No existing forecast.json found in S3 or failed to read: %s. Creating new.", exc)
+
+    current_data[location_id] = forecast_data
+
+    try:
+        s3.put_object(
+            Bucket=bucket_name,
+            Key=key,
+            Body=json.dumps(current_data, indent=2, ensure_ascii=False),
+            ContentType="application/json",
+        )
+        logging.info("Successfully updated %s in S3", key)
+    except Exception as exc:
+        logging.error("Failed to write %s to S3: %s", key, exc)
+
+
+
 def update_s3_history(location_id: str) -> None:
     if not bucket_name:
         return

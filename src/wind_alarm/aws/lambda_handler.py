@@ -18,8 +18,8 @@ def handler(event, context):
     """
     logger.info("Wind Alarm Lambda triggered with event: %s", event)
 
+    action = event.get("action", "alarm")
     location_id = event.get("location", os.environ.get("DEFAULT_LOCATION", "kochelsee"))
-    threshold = float(event.get("threshold", os.environ.get("DEFAULT_THRESHOLD", 12.0)))
     
     location_cfg = config.LOCATIONS.get(location_id)
     if not location_cfg:
@@ -27,6 +27,22 @@ def handler(event, context):
         logger.error(error_msg)
         return {"statusCode": 400, "body": error_msg}
 
+    if action == "forecast":
+        from wind_alarm.forecast.forecast_runner import run_forecast
+        try:
+            forecast_data = run_forecast(location_id)
+            return {
+                "statusCode": 200,
+                "body": forecast_data
+            }
+        except Exception as e:
+            logger.error("Error in forecast execution: %s", str(e))
+            return {
+                "statusCode": 500,
+                "body": {"error": str(e)}
+            }
+
+    threshold = float(event.get("threshold", os.environ.get("DEFAULT_THRESHOLD", 12.0)))
     from wind_alarm.aggregator import run_and_aggregate_measurements
 
     try:
@@ -40,6 +56,7 @@ def handler(event, context):
             "statusCode": 200,
             "body": aggregated_data
         }
+
     except Exception as e:
         logger.error("Error in aggregation execution: %s", str(e))
         return {

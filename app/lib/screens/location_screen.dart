@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../widgets/wind_trend_chart.dart';
 import '../widgets/criteria_item.dart';
 import '../services/wind_api_service.dart';
+import '../widgets/forecast_card.dart';
 
 class LocationScreen extends StatefulWidget {
   final WindLocation location;
@@ -22,11 +23,22 @@ class _LocationScreenState extends State<LocationScreen> {
   Map<String, double> _gustValues = {};
   bool _snoozeIfCalm = true;
   Timer? _pollingTimer;
+  WindForecast? _forecast;
 
   @override
   void initState() {
     super.initState();
+    _fetchForecast();
     _startPolling();
+  }
+
+  Future<void> _fetchForecast() async {
+    final apiLocId = widget.location.name.toLowerCase();
+    final forecastData = await WindApiService.getForecast(apiLocId);
+    if (!mounted) return;
+    setState(() {
+      _forecast = forecastData;
+    });
   }
 
   void _startPolling() {
@@ -202,6 +214,13 @@ class _LocationScreenState extends State<LocationScreen> {
             ),
             const SizedBox(height: 32),
             _buildCurrentWindCard(loc, wind),
+            if (_forecast != null) ...[
+              const SizedBox(height: 32),
+              ForecastCard(
+                forecast: _forecast!,
+                accentColor: loc.accentColor,
+              ),
+            ],
             const SizedBox(height: 40),
             Text(
               "Überwachung & Kriterien",
