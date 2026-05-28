@@ -64,25 +64,31 @@ class _ForecastCardState extends State<ForecastCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.psychology_rounded,
-                    color: widget.accentColor,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    "KI-METEOROLOGE",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                      letterSpacing: 1.0,
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.psychology_rounded,
+                      color: widget.accentColor,
+                      size: 24,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        "KI-METEOROLOGE",
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                          letterSpacing: 1.0,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 12),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
@@ -172,28 +178,39 @@ class _ForecastCardState extends State<ForecastCard> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Row(
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 6,
                       children: [
-                        const Icon(Icons.navigation_rounded, color: AppColors.textSecondary, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          "Richtung: ${widget.forecast.expectedDirection}",
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.navigation_rounded, color: AppColors.textSecondary, size: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              "Richtung: ${widget.forecast.expectedDirection}",
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 12),
-                        const Icon(Icons.access_time_filled_rounded, color: AppColors.textSecondary, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          widget.forecast.bestTimeWindow,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.access_time_filled_rounded, color: AppColors.textSecondary, size: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              widget.forecast.bestTimeWindow,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
