@@ -31,6 +31,12 @@ FORECAST_SOURCES = {
     ],
     "kochelsee": [
         {
+            "id": "foehn_diagram",
+            "name": "Föhndiagramm",
+            "url": "https://www.wwwind.com/de/wind-und-wetter/",
+            "type": "diagram",
+        },
+        {
             "id": "windfinder_forecast",
             "name": "Windfinder 7-Tage",
             "url": "https://de.windfinder.com/forecast/kochelsee_trimini",

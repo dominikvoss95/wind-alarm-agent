@@ -21,8 +21,9 @@ def test_forecast_sources_config():
     assert any(s["id"] == "windguru_arome" for s in gardasee_sources)
 
     kochelsee_sources = FORECAST_SOURCES["kochelsee"]
-    assert len(kochelsee_sources) == 3
+    assert len(kochelsee_sources) == 4
     assert any(s["id"] == "patscherkofel" for s in kochelsee_sources)
+    assert any(s["id"] == "foehn_diagram" for s in kochelsee_sources)
 
 
 @patch("wind_alarm.forecast.forecast_scraper.sync_playwright")
@@ -45,11 +46,12 @@ def test_scrape_forecast_sources(mock_playwright):
     res = scrape_forecast_sources("kochelsee")
     
     # Assert pages were created and screenshotted
-    assert mock_page.goto.call_count == 3
-    assert mock_page.screenshot.call_count == 3
+    assert mock_page.goto.call_count == 4
+    assert mock_page.screenshot.call_count == 4
     assert "windfinder_forecast" in res
     assert "windfinder_superforecast" in res
     assert "patscherkofel" in res
+    assert "foehn_diagram" in res
 
 
 def test_analyze_forecasts_local_mode():

@@ -4,11 +4,9 @@ Forecast analyzer module using Amazon Bedrock to extract and evaluate meteorolog
 import json
 import logging
 import os
-import re
 from typing import Dict, Any
 
 from wind_alarm.config import config
-from wind_alarm.forecast.forecast_sources import FORECAST_SOURCES
 
 logger = logging.getLogger("wind_alarm.forecast_analyzer")
 
@@ -45,8 +43,13 @@ def analyze_forecasts(location_id: str, screenshots: Dict[str, str]) -> Dict[str
         )
         if location_id == "kochelsee":
             prompt += (
-                "- Patscherkofel wind station: High wind speeds (> 30 kts / 50-60 km/h) and strong gusts there indicate a strong south Föhn, which might break through at Kochelsee.\n"
-                "- Windfinder Forecast / Superforecast: Check wind speed, gust speed, and direction at Kochelsee (Trimini).\n"
+                "Apply the following rules for Kochelsee:\n"
+                "- 7-Day Forecast (Windfinder Forecast): If a southerly wind (S, SSE, or SSW; also SE or SW) is forecast overnight (über Nacht) and is over 4 knots, Föhn becomes probable.\n"
+                "- Weather Conditions: The weather should tend to be good (sunny/clear) with no rain.\n"
+                "- Superforecast: Overnight and in the morning, the wind should be over 10 knots. If it is forecast to be 20 knots or more, the Föhn will probably be very strong.\n"
+                "- Patscherkofel: The forecast at Patscherkofel must support this trend (look for strong south wind/gusts at Patscherkofel as the primary Föhn indicator).\n"
+                "- Wind Direction: S or SSO (SSE) wind directions are the best indicators for a good breakthrough.\n"
+                "- Föhndiagramm: Look for a South Föhn pressure difference, preferably over +4 hPa, ideally overnight and in the morning.\n"
             )
         elif location_id == "gardasee":
             prompt += (
@@ -139,7 +142,7 @@ def _get_mock_forecast(location_id: str) -> Dict[str, Any]:
     """Generates mock forecast for local development/testing."""
     if location_id == "kochelsee":
         return {
-            "summary": "Mäßiger Föhnwind am Nachmittag wahrscheinlich, da Patscherkofel anzieht.",
+            "summary": "Mäßiger Föhnwind am Nachmittag wahrscheinlich, da Patscherkofel anzieht und das Föhndiagramm positiv ist.",
             "wind_probability_percent": 65,
             "confidence": "medium",
             "expected_wind_knots": {"min": 10, "max": 18},
@@ -147,6 +150,7 @@ def _get_mock_forecast(location_id: str) -> Dict[str, Any]:
             "best_time_window": "14:00 - 18:00",
             "model_consensus": "Superforecast zeigt leichten Südwind, Föhnindikatoren deuten auf stärkere Böen hin.",
             "sources_analyzed": [
+                {"name": "Föhndiagramm", "summary": "Zeigt positive Druckdifferenz von +4.5 hPa."},
                 {"name": "Windfinder 7-Tage", "summary": "Leichter Südwind (6-8 kts) angesagt."},
                 {"name": "Windfinder Superforecast", "summary": "10 kts Südwind ab Mittag prognostiziert."},
                 {"name": "Patscherkofel (Föhn-Indikator)", "summary": "Föhnstation zeigt ansteigenden Südwind mit Böen bis 32 kts."}
