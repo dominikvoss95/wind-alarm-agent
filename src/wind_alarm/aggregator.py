@@ -276,6 +276,20 @@ def run_and_aggregate_measurements(
 
     store.set_measurement(location_id, aggregated_data)
 
+    if config.USE_AZURE:
+        try:
+            from azure.knowledge_base import save_measurement, update_blob_measurements, update_blob_history
+            db_state = dict(aggregated_data)
+            db_state["location_id"] = location_id
+            save_measurement(db_state)
+            logging.info("Successfully persisted measurement to Cosmos DB history for %s", location_id)
+            
+            # Write static files to Azure Blob Storage
+            update_blob_measurements(location_id, aggregated_data)
+            update_blob_history(location_id)
+        except Exception as exc:
+            logging.warning("Failed to persist measurement to Cosmos DB/Blob Storage: %s", exc)
+
     if config.USE_AWS:
         try:
             from aws.knowledge_base import save_measurement, update_s3_measurements, update_s3_history

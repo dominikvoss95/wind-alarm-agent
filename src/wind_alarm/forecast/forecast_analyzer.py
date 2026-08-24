@@ -19,7 +19,126 @@ def analyze_forecasts(location_id: str, screenshots: Dict[str, str]) -> Dict[str
         logger.warning("No screenshots provided for forecast analysis of %s", location_id)
         return _get_error_fallback(location_id, "No screenshots captured from sources.")
 
-    if not config.USE_AWS:
+    if config.USE_AZURE:
+        try:
+            from openai import AzureOpenAI
+            from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+            import base64
+
+            endpoint = config.AZURE_OPENAI_ENDPOINT
+            key = config.AZURE_OPENAI_KEY
+            deployment = config.AZURE_OPENAI_DEPLOYMENT_NAME
+
+            if key:
+                client = AzureOpenAI(
+                    azure_endpoint=endpoint,
+                    api_key=key,
+                    api_version="2024-08-01-preview"
+                )
+            else:
+                token_provider = get_bearer_token_provider(
+                    DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+                )
+                client = AzureOpenAI(
+                    azure_endpoint=endpoint,
+                    azure_ad_token_provider=token_provider,
+                    api_version="2024-08-01-preview"
+                )
+
+            prompt = (
+                "You are an expert local meteorologist specialized in predicting wind conditions for water sports (windsurfing, kitesurfing, wingfoiling) "
+                f"at {location_id.upper()}. Analyze the provided screenshots of various forecast sources and graphs, and construct "
+                "an uncertainty-based wind forecast.\n\n"
+                "Here are the screenshots provided in order:\n"
+            )
+            for idx, (source_id, _) in enumerate(screenshots.items()):
+                prompt += f"Image {idx + 1}: Screenshot of the source '{source_id}'\n"
+
+            prompt += (
+                "\nAnalyze all images carefully. Pay special attention to:\n"
+            )
+            if location_id == "kochelsee":
+                prompt += (
+                    "Apply the following rules for Kochelsee:\n"
+                    "- 7-Day Forecast (Windfinder Forecast): If a southerly wind (S, SSE, or SSW; also SE or SW) is forecast overnight (über Nacht) and is over 4 knots, Föhn becomes probable.\n"
+                    "- Weather Conditions: The weather should tend to be good (sunny/clear) with no rain.\n"
+                    "- Superforecast: Overnight and in the morning, the wind should be over 10 knots. If it is forecast to be 20 knots or more, the Föhn will probably be very strong.\n"
+                    "- Patscherkofel: The forecast at Patscherkofel must support this trend (look for strong south wind/gusts at Patscherkofel as the primary Föhn indicator).\n"
+                    "- Wind Direction: S or SSO (SSE) wind directions are the best indicators for a good breakthrough.\n"
+                    "- Föhndiagramm: Look for a South Föhn pressure difference, preferably over +4 hPa, ideally overnight and in the morning.\n"
+                )
+            elif location_id == "gardasee":
+                prompt += (
+                    "- Föhndiagramm: Look at the pressure difference curve Innsbruck-Bozen. A high positive pressure difference (> 4-6 hPa) indicates South Föhn, which can blow strongly at North Lake Garda.\n"
+                    "- Windfinder / Superforecast / Windguru Arome: Look at the wind speed, gusts, and direction (North/Pelér in the morning, South/Ora in the afternoon) to see if there is a consensus.\n"
+                )
+
+            prompt += (
+                "\nProvide your analysis. You MUST return ONLY a JSON object of this structure. Do not output markdown code blocks (like ```json), just raw JSON.\n"
+                "{\n"
+                '  "summary": "Short 1-2 sentence German summary of the forecast.",\n'
+                '  "wind_probability_percent": 85,\n'
+                '  "confidence": "high", // must be "high", "medium", or "low"\n'
+                '  "expected_wind_knots": {"min": 12, "max": 20},\n'
+                '  "expected_direction": "N",\n'
+                '  "best_time_window": "10:00 - 15:00",\n'
+                '  "model_consensus": "German explanation of consensus/discrepancies between sources.",\n'
+                '  "sources_analyzed": [\n'
+                '    {"name": "SourceName", "summary": "Short German summary of this source\'s indication"}\n'
+                '  ]\n'
+                "}"
+            )
+
+            content_list = [{"type": "text", "text": prompt}]
+
+            for source_id, img_path in screenshots.items():
+                if not os.path.exists(img_path):
+                    continue
+                with open(img_path, "rb") as f:
+                    image_bytes = f.read()
+                base64_image = base64.b64encode(image_bytes).decode('utf-8')
+                
+                content_list.append({"type": "text", "text": f"--- Screenshot of source: {source_id} ---"})
+                content_list.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{base64_image}"
+                    }
+                })
+
+            messages = [
+                {
+                    "role": "user",
+                    "content": content_list
+                }
+            ]
+
+            logger.info("Invoking Azure OpenAI model %s for forecast analysis of %s", deployment, location_id)
+            
+            response = client.chat.completions.create(
+                model=deployment,
+                messages=messages,
+                response_format={"type": "json_object"},
+                temperature=0.0
+            )
+
+            response_text = response.choices[0].message.content
+            logger.info("Azure OpenAI raw response received. Parsing JSON...")
+
+            # Extract JSON block
+            start_idx = response_text.find("{")
+            end_idx = response_text.rfind("}")
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                json_str = response_text[start_idx:end_idx + 1]
+                parsed_data = json.loads(json_str)
+                return parsed_data
+            else:
+                raise ValueError(f"Could not extract valid JSON block from model response: {response_text}")
+        except Exception as exc:
+            logger.error("Failed to analyze forecasts via Azure OpenAI: %s", exc)
+            return _get_error_fallback(location_id, f"Analysis failed: {str(exc)}")
+
+    elif not config.USE_AWS:
         logger.info("Local mode: Returning mock forecast data for %s", location_id)
         return _get_mock_forecast(location_id)
 

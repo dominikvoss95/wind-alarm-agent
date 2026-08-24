@@ -139,7 +139,90 @@ def parse_primary_source(state: WindGraphState) -> WindGraphState:
     else:
         observed_at = state.get("fetched_at")
 
-    if config.USE_AWS:
+    if config.USE_AZURE:
+        # Use Azure OpenAI (GPT-4o-mini) to extract the wind information from the screenshot
+        try:
+            from openai import AzureOpenAI
+            from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+            import base64
+            import json
+
+            endpoint = config.AZURE_OPENAI_ENDPOINT
+            key = config.AZURE_OPENAI_KEY
+            deployment = config.AZURE_OPENAI_DEPLOYMENT_NAME
+
+            # Authenticate using Key or DefaultAzureCredential (AD token provider)
+            if key:
+                client = AzureOpenAI(
+                    azure_endpoint=endpoint,
+                    api_key=key,
+                    api_version="2024-08-01-preview"
+                )
+            else:
+                token_provider = get_bearer_token_provider(
+                    DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+                )
+                client = AzureOpenAI(
+                    azure_endpoint=endpoint,
+                    azure_ad_token_provider=token_provider,
+                    api_version="2024-08-01-preview"
+                )
+
+            with open(img_path, "rb") as f:
+                image_bytes = f.read()
+            base64_image = base64.b64encode(image_bytes).decode('utf-8')
+
+            prompt = (
+                "Read this webcam screenshot overlay. Extract the wind speed (Wind) and gust speed (Böen) in knots (kts). "
+                "Return a JSON object with keys \"wind\" and \"gust\" as integers. Do not write any other text or explanation. "
+                "Example response: {\"wind\": 15, \"gust\": 22}"
+            )
+
+            response = client.chat.completions.create(
+                model=deployment,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{base64_image}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.0
+            )
+
+            response_text = response.choices[0].message.content
+            
+            # Find JSON block
+            json_match = re.search(r"\{.*?\}", response_text, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group(0))
+                base_wind = float(data.get("wind", 0.0))
+                gust = float(data.get("gust", 0.0))
+            else:
+                raise ValueError(f"Could not parse JSON from Azure OpenAI response: {response_text}")
+
+            return {
+                "parse_status": "success",
+                "observed_at": observed_at,
+                "base_wind_knots": base_wind,
+                "gust_knots": gust,
+                "error_message": ""
+            }
+        except Exception as exc:
+            return {
+                "parse_status": "failed",
+                "error_message": f"Azure OpenAI OCR extraction failed: {str(exc)}"
+            }
+
+    elif config.USE_AWS:
         # Use AWS Bedrock (Nova Lite) to extract the wind information from the screenshot
         try:
             import boto3

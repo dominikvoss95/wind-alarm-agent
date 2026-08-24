@@ -13,6 +13,18 @@ class Config:
     """Central configuration class."""
     
     USE_AWS = os.environ.get("USE_AWS", "false").lower() == "true"
+    USE_AZURE = os.environ.get("USE_AZURE", "false").lower() == "true"
+    
+    # Azure Configuration
+    AZURE_OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT")
+    AZURE_OPENAI_KEY = os.environ.get("AZURE_OPENAI_KEY")
+    AZURE_OPENAI_DEPLOYMENT_NAME = os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o-mini")
+    AZURE_COSMOS_ENDPOINT = os.environ.get("AZURE_COSMOS_ENDPOINT")
+    AZURE_COSMOS_KEY = os.environ.get("AZURE_COSMOS_KEY")
+    AZURE_COSMOS_DB = os.environ.get("AZURE_COSMOS_DB", "wind-alarm-db")
+    AZURE_COSMOS_CONTAINER = os.environ.get("AZURE_COSMOS_CONTAINER", "measurements")
+    AZURE_STORAGE_CONNECTION_STRING = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+    AZURE_STORAGE_CONTAINER_NAME = os.environ.get("AZURE_STORAGE_CONTAINER_NAME", "wind-alarm-assets")
     
     # Filesystem Paths
     IS_LAMBDA = bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME") or os.environ.get("LAMBDA_TASK_ROOT"))

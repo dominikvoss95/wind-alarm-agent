@@ -10,3 +10,7 @@ opencv-python-headless
 easyocr
 boto3
 firebase-admin
+openai
+azure-cosmos
+azure-storage-blob
+azure-identity
