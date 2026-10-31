@@ -8,8 +8,7 @@ from pathlib import Path
 import cv2
 import easyocr
 
-# Region of the weather overlay in 1280×960 frames (y1:y2, x1:x2).
-_OVERLAY_CROP = (slice(450, 850), slice(50, 450))
+from wind_alarm.readings import crop_overlay, parse_overlay_text
 
 IMG_DIR = Path("data/raw/webcam")
 OUTPUT_CSV = Path("data/processed_wind.csv")
@@ -19,23 +18,21 @@ def _init_reader() -> easyocr.Reader:
     return easyocr.Reader(["en", "de"])
 
 
-def parse_ocr_text(raw_text: str) -> tuple[int | None, int | None]:
+def parse_ocr_text(raw_text: str) -> tuple[float | None, float | None]:
     """Return (wind_kts, gust_kts) parsed from concatenated OCR output."""
-    wind = re.search(r"Wind:?\s*(\d+)\s*kts?", raw_text, re.IGNORECASE)
-    gust = re.search(r"B[öo]en:?\s*(\d+)\s*kts?", raw_text, re.IGNORECASE)
-    return (
-        int(wind.group(1)) if wind else None,
-        int(gust.group(1)) if gust else None,
-    )
+    reading = parse_overlay_text(raw_text)
+    if reading.warnings and reading.base_wind_knots is None:
+        return None, None
+    return reading.base_wind_knots, reading.gust_knots
 
 
 def extract_from_image(img_path: Path, reader: easyocr.Reader):
-    """Crop the overlay region, run OCR, return (wind, gust)."""
+    """Crop the burned-in overlay, run OCR, return (wind, gust)."""
     img = cv2.imread(str(img_path))
     if img is None:
         return None, None
 
-    crop = img[_OVERLAY_CROP]
+    crop = crop_overlay(img)
     results = reader.readtext(crop)
     full_text = " ".join(text for _, text, _ in results)
     return parse_ocr_text(full_text)

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../models/location.dart';
 import '../services/wind_api_service.dart';
+import '../push/alarm_push.dart';
 import '../utils/alarm_history.dart';
 import '../utils/alarm_status.dart';
 import '../utils/alarm_utils.dart';
@@ -42,6 +43,19 @@ class _MainScreenState extends State<MainScreen> {
     _loadHistory();
     _loadAlarmStatus();
     _startPolling();
+    _syncArmedTopics();
+  }
+
+  Future<void> _syncArmedTopics() async {
+    final topics = topicsForArmed(
+      _isMonitoringArmed,
+      WindLocation.values.map((location) => appLocations[location]!.fcmTopic).toList(),
+    );
+    try {
+      await subscribeToAlarmTopics(topics);
+    } catch (error) {
+      debugPrint('Topic subscribe failed: $error');
+    }
   }
 
   Future<void> _toggleMonitoring(int index, bool isArmed, LocationData data) async {
@@ -51,8 +65,7 @@ class _MainScreenState extends State<MainScreen> {
 
     try {
       if (isArmed) {
-        await FirebaseMessaging.instance.subscribeToTopic(data.fcmTopic);
-        debugPrint('Subscribed to topic: ${data.fcmTopic}');
+        await subscribeToAlarmTopics([data.fcmTopic]);
       } else {
         await FirebaseMessaging.instance.unsubscribeFromTopic(data.fcmTopic);
         debugPrint('Unsubscribed from topic: ${data.fcmTopic}');

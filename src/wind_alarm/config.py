@@ -50,6 +50,44 @@ class Config:
     PAGE_URL_TEMPLATE = "https://www.addicted-sports.com/webcam/{cam_id}/#/{y}/{m}/{d}/{hm}"
     DEFAULT_WEBCAM_URL = "https://www.addicted-sports.com/webcam/kochelsee/trimini/"
 
+    # iOS app and the native GoogleService-Info.plist both belong to this project.
+    # wind-alarm-agent-eb65f is a different Firebase project and will not deliver pushes.
+    EXPECTED_FIREBASE_PROJECT_ID = "wind-alarm-agent"
+    IOS_BUNDLE_ID = "de.dominikvoss.wind-alarm"
+
+    # wc is the station id (webcam.name), which is not always the URL slug.
+    # Malcesine's page is /gardasee/malcesine/ but the station id is "gardasee".
+    WEBCAMS = {
+        "trimini": {
+            "slug": "trimini",
+            "wc": "kochelsee",
+            "timezone": "Europe/Berlin",
+            "page_url": "https://www.addicted-sports.com/webcam/kochelsee/trimini/",
+            "image_url": "https://www.addicted-sports.com/fileadmin/webcam/kochelsee/current/640.jpg",
+        },
+        "malcesinenord": {
+            "slug": "malcesinenord",
+            "wc": "malcesinenord",
+            "timezone": "Europe/Rome",
+            "page_url": "https://www.addicted-sports.com/webcam/gardasee/malcesinenord/",
+            "image_url": "https://www.addicted-sports.com/fileadmin/webcam/malcesinenord/current/640.jpg",
+        },
+        "malcesine": {
+            "slug": "malcesine",
+            "wc": "gardasee",
+            "timezone": "Europe/Rome",
+            "page_url": "https://www.addicted-sports.com/webcam/gardasee/malcesine/",
+            "image_url": "https://www.addicted-sports.com/fileadmin/webcam/gardasee/current/640.jpg",
+        },
+        "campione": {
+            "slug": "campione",
+            "wc": "campione",
+            "timezone": "Europe/Rome",
+            "page_url": "https://www.addicted-sports.com/webcam/gardasee/campione/",
+            "image_url": "https://www.addicted-sports.com/fileadmin/webcam/campione/current/640.jpg",
+        },
+    }
+
     LOCATIONS = {
         "kochelsee": {
             "name": "Kochelsee",
@@ -71,6 +109,19 @@ class Config:
 
     # OCR settings
     OCR_LANGUAGES = ["en", "de"]
+
+    def webcam_for_url(self, url: str) -> dict:
+        """Registry entry for a webcam page. Unknown pages fall back to the URL slug."""
+        slug = (url or "").split("#", 1)[0].rstrip("/").split("/")[-1].lower()
+        if slug in self.WEBCAMS:
+            return self.WEBCAMS[slug]
+        return {
+            "slug": slug or "webcam",
+            "wc": slug or "webcam",
+            "timezone": "Europe/Berlin",
+            "page_url": url,
+            "image_url": "",
+        }
 
     def get(self, key: str, default=None):
         """Legacy dictionary-like access."""
@@ -97,10 +148,20 @@ class Config:
             if raw_json:
                 logging.info("Initializing Firebase Admin SDK from FIREBASE_SERVICE_ACCOUNT_JSON")
                 try:
-                    cred = credentials.Certificate(json.loads(raw_json))
+                    parsed = json.loads(raw_json)
+                    cred = credentials.Certificate(parsed)
                 except (json.JSONDecodeError, ValueError) as exc:
                     logging.error("FIREBASE_SERVICE_ACCOUNT_JSON is not valid service account JSON: %s", exc)
                     raise
+                project_id = parsed.get("project_id")
+                if project_id and project_id != self.EXPECTED_FIREBASE_PROJECT_ID:
+                    logging.error(
+                        "Firebase service account project_id %s does not match the iOS app project %s "
+                        "(bundle %s). Pushes will not reach the phone.",
+                        project_id,
+                        self.EXPECTED_FIREBASE_PROJECT_ID,
+                        self.IOS_BUNDLE_ID,
+                    )
                 firebase_admin.initialize_app(cred)
             elif os.path.exists(self.FIREBASE_CREDENTIALS_PATH):
                 logging.info("Initializing Firebase Admin SDK from %s", self.FIREBASE_CREDENTIALS_PATH)

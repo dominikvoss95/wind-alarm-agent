@@ -5,6 +5,34 @@ import 'package:android_intent_plus/android_intent.dart';
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
+const alarmSoundFile = 'alarm_sound.mp3';
+
+bool _notificationsReady = false;
+
+DarwinNotificationDetails iosAlarmDetails() {
+  return const DarwinNotificationDetails(
+    presentSound: true,
+    presentAlert: true,
+    interruptionLevel: InterruptionLevel.timeSensitive,
+    sound: alarmSoundFile,
+  );
+}
+
+Future<void> initLocalNotifications() async {
+  if (_notificationsReady) return;
+  const initializationSettings = InitializationSettings(
+    android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+    iOS: DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+      requestCriticalPermission: false,
+    ),
+  );
+  await flutterLocalNotificationsPlugin.initialize(settings: initializationSettings);
+  _notificationsReady = true;
+}
+
 Future<void> triggerAlarmLogic({int hour = 6, int minute = 0, String locationName = "KOCHELSEE"}) async {
   if (Platform.isAndroid) {
     final intent = AndroidIntent(
@@ -18,14 +46,7 @@ Future<void> triggerAlarmLogic({int hour = 6, int minute = 0, String locationNam
     );
     await intent.launch();
   } else if (Platform.isIOS) {
-    const details = NotificationDetails(
-      iOS: DarwinNotificationDetails(
-        presentSound: true,
-        presentAlert: true,
-        interruptionLevel: InterruptionLevel.critical,
-        sound: 'alarm_sound.mp3',
-      ),
-    );
+    final details = NotificationDetails(iOS: iosAlarmDetails());
     await flutterLocalNotificationsPlugin.show(
       id: 88,
       title: '🌬️ $locationName WIND!',

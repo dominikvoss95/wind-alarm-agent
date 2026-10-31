@@ -23,27 +23,26 @@ def test_fetch_primary_source_missing_identifier():
     assert "Missing source_identifier" in result.get("error_message")
 
 
-@patch("wind_alarm.nodes.sync_playwright")
-def test_fetch_primary_source_success(mock_playwright):
-    """Test successful data fetching using Playwright."""
-    mock_pw_context = MagicMock()
-    mock_browser = MagicMock()
-    mock_context = MagicMock()
-    mock_page = MagicMock()
-
-    mock_playwright.return_value.__enter__.return_value = mock_pw_context
-    mock_pw_context.chromium.launch.return_value = mock_browser
-    mock_browser.new_context.return_value = mock_context
-    mock_context.new_page.return_value = mock_page
-
-    state = WindGraphState(source_identifier="http://example.com")
+@patch("wind_alarm.nodes.capture_webcam")
+def test_fetch_primary_source_success(mock_capture):
+    """Station JSON and the frame path are what the parser reads."""
+    mock_capture.return_value = MagicMock(
+        image_path="/tmp/trimini_640.jpg",
+        station_json='{"measurment":{}}',
+        timezone="Europe/Berlin",
+        fetched_at="2026-10-31T18:00:00+00:00",
+    )
+    state = WindGraphState(
+        source_identifier="https://www.addicted-sports.com/webcam/kochelsee/trimini/"
+    )
     result = fetch_primary_source(state)
 
     assert result.get("fetch_status") == "success"
-    assert result.get("raw_payload", "").endswith("debug/full_screenshot.png")
+    assert result.get("raw_payload") == "/tmp/trimini_640.jpg"
+    assert "measurment" in result.get("station_json", "")
+    assert result.get("cam_timezone") == "Europe/Berlin"
     assert result.get("error_message") == ""
     assert "fetched_at" in result
-    mock_page.screenshot.assert_called_once()
 
 
 def test_parse_primary_source_skipped():

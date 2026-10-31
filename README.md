@@ -31,7 +31,7 @@ aggregator (one run per webcam, then a single push per location)
 Flutter app (polls measurements.json, subscribes to the FCM topic)
 ```
 
-The graph lives in `src/wind_alarm/`. Locally, OCR is EasyOCR. With `USE_AZURE` or `USE_AWS`, the screenshot is read by Azure OpenAI or Amazon Bedrock instead. `app.py` runs the aggregator. `skip_notification` is set on each webcam run so only the aggregated push is sent.
+The graph lives in `src/wind_alarm/`. The live value comes from the webcam's station feed (`wsavg` / `wsmax` in knots, UTC timestamp), which is the same data the "Wind & Wetter" panel shows. The burned-in overlay on `current/640.jpg` is the check: base wind is the unlabeled knots line, gust is the `Böe` line, and the °C line and the clock are not wind. OCR (EasyOCR) and, when `USE_AZURE` or `USE_AWS` is set, the vision model are the fallback when the station feed is missing. `app.py` runs the aggregator. `skip_notification` is set on each webcam run so only the aggregated push is sent.
 
 A separate forecast path screenshots Windfinder, Windguru, and the Föhn diagram and asks the configured model for a German summary. Results are written to `forecast.json` on S3 or Azure Blob, or to a local file when neither cloud flag is set.
 
@@ -41,6 +41,7 @@ Two schedulers exist. They do not share one window.
 
 - GitHub Actions `wind-alarm.yml`: every 15 minutes from 03:00 through 06:45 UTC, Kochelsee, threshold 10.
 - GitHub Actions `gardasee-alarm.yml`: every 15 minutes from 03:00 through 08:45 UTC, Gardasee, threshold 12.
+- GitHub Actions `verify-readings.yml`: compares the station feed with the overlay. The schedule runs only when the repository variable `WIND_READING_VERIFY` is `true`. `workflow_dispatch` and `python app.py --verify` always run, and neither sends a push.
 - Terraform EventBridge (`terraform/main.tf`): every 5 minutes from 03:00 through 04:55 UTC (about 05:00–06:55 CEST). One rule invokes Lambda for **both** locations (thresholds 10 and 12). Gardasee's longer morning window is only covered by the GitHub workflow.
 
 The Flutter home screen shows the EventBridge window (05:00–07:00, every 5 minutes). The GitHub workflows are the longer 15-minute checks.
@@ -104,6 +105,10 @@ PYTHONPATH=src python app.py --location kochelsee --threshold 10 --loop --interv
 
 # HTTP API on port 8000
 PYTHONPATH=src python app.py --api
+
+# compare station JSON with the overlay; does not send a push
+PYTHONPATH=src python app.py --verify --location kochelsee
+PYTHONPATH=src python app.py --verify --location gardasee
 
 # LangGraph (default) or Bedrock Agents
 PYTHONPATH=src python app.py --orchestrator langgraph

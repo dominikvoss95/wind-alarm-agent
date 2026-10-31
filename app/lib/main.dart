@@ -1,27 +1,23 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/services.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'firebase_options.dart';
+import 'push/alarm_push.dart';
 import 'theme/app_theme.dart';
 import 'screens/main_screen.dart';
 import 'utils/alarm_utils.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  if (message.data['action'] == 'schedule_alarm') {
-    final locationName = message.data['location'] ?? 'KOCHELSEE';
-    final now = DateTime.now();
-    await triggerAlarmLogic(
-      locationName: locationName.toUpperCase(),
-      hour: now.hour,
-      minute: now.minute,
-    );
-  }
+  await firebaseMessagingBackgroundHandler(message);
 }
 
 void main() async {
@@ -30,26 +26,12 @@ void main() async {
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    FirebaseMessaging.onMessage.listen(handleForegroundAlarm);
   } catch (e) {
     debugPrint("Firebase init failed: $e");
   }
 
-  const AndroidInitializationSettings initializationSettingsAndroid =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
-  const DarwinInitializationSettings initializationSettingsDarwin =
-      DarwinInitializationSettings(
-    requestAlertPermission: true,
-    requestBadgePermission: true,
-    requestSoundPermission: true,
-    requestCriticalPermission: true,
-  );
-  const InitializationSettings initializationSettings = InitializationSettings(
-    android: initializationSettingsAndroid,
-    iOS: initializationSettingsDarwin,
-  );
-  await flutterLocalNotificationsPlugin.initialize(
-    settings: initializationSettings,
-  );
+  await initLocalNotifications();
 
   tz.initializeTimeZones();
   await initializeDateFormatting('de_DE', null);

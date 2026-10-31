@@ -3,9 +3,8 @@ Aggregated checking and notification module for multiple webcams per location.
 """
 import logging
 from typing import Dict, Any, List
-from firebase_admin import messaging
-
 from wind_alarm.config import config
+from wind_alarm.notify import build_alarm_message
 from wind_alarm.state import WindGraphState
 from wind_alarm import store
 
@@ -44,21 +43,20 @@ def _extract_cam_data(res: Any) -> Dict[str, Any]:
     }
 
 
-def _get_max_wind(results: Dict[str, Any]) -> float:
-    """Extract max wind speed safely, handling potential MagicMocks in testing."""
+def _trigger_wind(location_id: str, results: Dict[str, Any]) -> float:
+    """Highest base wind among the spots that actually raised the alarm."""
     wind_values = []
-    for res in results.values():
-        if hasattr(res, "get"):
-            val = res.get("base_wind_knots", 0.0)
-            if isinstance(val, (int, float)):
-                wind_values.append(val)
-            else:
-                try:
-                    wind_values.append(float(val))
-                except (ValueError, TypeError):
-                    wind_values.append(0.0)
-        else:
-            wind_values.append(0.0)
+    for spot in TRIGGER_SPOTS.get(location_id, []):
+        res = results.get(spot)
+        if not hasattr(res, "get"):
+            continue
+        if not (res.get("threshold_exceeded") and res.get("is_fresh")):
+            continue
+        val = res.get("base_wind_knots", 0.0)
+        try:
+            wind_values.append(float(val))
+        except (TypeError, ValueError):
+            continue
     return max(wind_values) if wind_values else 0.0
 
 
@@ -100,22 +98,18 @@ def _send_notification_if_triggered(
     trigger_spots = TRIGGER_SPOTS.get(location_id, [])
     body = _build_notification_body(trigger_spots, results)
     topic = location_cfg["fcm_topic"]
-    max_wind = _get_max_wind(results)
+    max_wind = _trigger_wind(location_id, results)
 
-    message = messaging.Message(
-        notification=messaging.Notification(
-            title=f"💨 Wind-Alarm: {location_cfg['name']}!",
-            body=body,
-        ),
-        data={
-            "action": "schedule_alarm",
-            "location": location_id,
-            "wind": str(max_wind),
-        },
+    message = build_alarm_message(
         topic=topic,
+        title=f"💨 Wind-Alarm: {location_cfg['name']}!",
+        body=body,
+        location_id=location_id,
+        wind_knots=max_wind,
     )
 
     try:
+        from firebase_admin import messaging
         config.initialize_firebase()
         response = messaging.send(message)
         logging.info("Successfully sent consolidated notification: %s", response)

@@ -25,8 +25,24 @@ def main():
     )
     parser.add_argument("--loop", action="store_true")
     parser.add_argument("--interval", type=int, default=30)
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="Compare station JSON with the overlay and exit. Does not send a push.",
+    )
 
     args = parser.parse_args()
+
+    if args.verify:
+        from wind_alarm.verify import exit_code, verify_locations
+        reports = verify_locations([args.location], run_ocr=True)
+        for report in reports:
+            print(
+                f"{report.get('slug')}: station={report.get('station_wind')} "
+                f"overlay={report.get('overlay_wind')} agree={report.get('agree')} "
+                f"({report.get('detail')})"
+            )
+        raise SystemExit(exit_code(reports))
 
     if args.api:
         import uvicorn
