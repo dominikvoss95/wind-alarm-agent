@@ -29,6 +29,7 @@ data/
 !pyproject.toml
 !package.json
 !manifest.json
+!tests/fixtures/*.json
 
 # AWS and Cloud CLI
 .aws/
