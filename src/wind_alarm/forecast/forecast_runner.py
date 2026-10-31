@@ -37,6 +37,13 @@ def run_forecast(location_id: str) -> Dict[str, Any]:
             logger.info("Successfully updated forecast in S3 for %s", location_id)
         except Exception as exc:
             logger.error("Failed to update forecast in S3: %s", exc)
+    elif config.USE_AZURE:
+        try:
+            from azure.knowledge_base import update_blob_forecast
+            update_blob_forecast(location_id, forecast_result)
+            logger.info("Successfully updated forecast in Azure Blob Storage for %s", location_id)
+        except Exception as exc:
+            logger.error("Failed to update forecast in Azure Blob Storage: %s", exc)
     else:
         # Local mode: write to local file
         local_path = config.WRITE_ROOT / f"forecast_{location_id}.json"

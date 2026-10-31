@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/location.dart';
 import '../theme/app_theme.dart';
 import '../widgets/wind_trend_chart.dart';
@@ -19,8 +18,8 @@ class LocationScreen extends StatefulWidget {
 }
 
 class _LocationScreenState extends State<LocationScreen> {
-  Map<String, double> _windValues = {};
-  Map<String, double> _gustValues = {};
+  final Map<String, double> _windValues = {};
+  final Map<String, double> _gustValues = {};
   bool _snoozeIfCalm = true;
   Timer? _pollingTimer;
   WindForecast? _forecast;
@@ -49,6 +48,7 @@ class _LocationScreenState extends State<LocationScreen> {
   }
 
   List<WindHistoryItem> _history = [];
+  bool _readingIsFresh = false;
 
   Future<void> _fetchMeasurement() async {
     final apiLocId = widget.location.name.toLowerCase();
@@ -57,11 +57,17 @@ class _LocationScreenState extends State<LocationScreen> {
     if (!mounted) return;
     setState(() {
       _history = historyData;
+      _readingIsFresh = measurement != null && measurement.isCurrentlyFresh;
       if (measurement != null) {
         if (measurement.webcams != null) {
           measurement.webcams!.forEach((camId, data) {
-            _windValues[camId] = (data['base_wind'] ?? 0.0).toDouble();
-            _gustValues[camId] = (data['gust'] ?? 0.0).toDouble();
+            if (data is! Map) {
+              return;
+            }
+            final wind = data['base_wind'] ?? data['base_wind_knots'] ?? 0;
+            final gust = data['gust'] ?? data['gust_knots'] ?? 0;
+            _windValues[camId] = wind is num ? wind.toDouble() : 0.0;
+            _gustValues[camId] = gust is num ? gust.toDouble() : 0.0;
           });
         } else {
           final locData = appLocations[widget.location]!;
@@ -141,7 +147,7 @@ class _LocationScreenState extends State<LocationScreen> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withOpacity(0.3),
+                  Colors.black.withValues(alpha: 0.3),
                   AppColors.backgroundDark,
                 ],
               ),
@@ -161,7 +167,7 @@ class _LocationScreenState extends State<LocationScreen> {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.4),
+            color: Colors.black.withValues(alpha: 0.4),
             shape: BoxShape.circle,
           ),
           child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
@@ -206,7 +212,7 @@ class _LocationScreenState extends State<LocationScreen> {
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: loc.accentColor.withOpacity(0.7),
+                      color: loc.accentColor.withValues(alpha: 0.7),
                     ),
                   ),
                 ],
@@ -239,7 +245,7 @@ class _LocationScreenState extends State<LocationScreen> {
             CriteriaItem(
               label: "Min. Windstärke",
               subLabel: "Alarm auslösen ab",
-              value: "12 kts",
+              value: "${loc.alarmThresholdKnots.round()} kts",
             ),
             CriteriaItem(
               label: "Windrichtung",
@@ -265,7 +271,7 @@ class _LocationScreenState extends State<LocationScreen> {
               CriteriaItem(
                 label: "Wind-Schwellenwert",
                 subLabel: "Minimum für Ora oder Pelér",
-                value: "14 kts",
+                value: "${loc.alarmThresholdKnots.round()} kts",
               ),
               CriteriaItem(
                 label: "Schlummern wenn ruhig",
@@ -274,7 +280,7 @@ class _LocationScreenState extends State<LocationScreen> {
                 trailing: Switch(
                   value: _snoozeIfCalm,
                   onChanged: (v) => setState(() => _snoozeIfCalm = v),
-                  activeColor: AppColors.accentCyan,
+                  activeThumbColor: AppColors.accentCyan,
                 ),
               ),
             ],
@@ -374,15 +380,18 @@ class _LocationScreenState extends State<LocationScreen> {
                         Container(
                           width: 6,
                           height: 6,
-                          decoration: const BoxDecoration(color: AppColors.statusGreen, shape: BoxShape.circle),
+                          decoration: BoxDecoration(
+                            color: _readingIsFresh ? AppColors.statusGreen : AppColors.textMuted,
+                            shape: BoxShape.circle,
+                          ),
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          "LIVE-DATEN",
+                          _readingIsFresh ? "LIVE-DATEN" : "KEINE FRISCHEN DATEN",
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.statusGreen,
+                            color: _readingIsFresh ? AppColors.statusGreen : AppColors.textMuted,
                           ),
                         ),
                       ],
@@ -404,10 +413,8 @@ class _LocationScreenState extends State<LocationScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("Vorgestern", style: GoogleFonts.plusJakartaSans(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w700)),
-              Text("Gestern", style: GoogleFonts.plusJakartaSans(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w700)),
-              Text("Heute", style: GoogleFonts.plusJakartaSans(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w700)),
-              Text("Vorhersage", style: GoogleFonts.plusJakartaSans(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w700)),
+              Text("Älter", style: GoogleFonts.plusJakartaSans(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w700)),
+              Text("Aktuell", style: GoogleFonts.plusJakartaSans(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w700)),
             ],
           ),
         ],

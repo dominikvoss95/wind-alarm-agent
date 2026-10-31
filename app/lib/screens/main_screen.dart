@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -48,7 +47,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
-    print("DEBUG: MainScreen initState");
+    debugPrint("MainScreen initState");
     _fetchForecasts();
     _startPolling();
   }
@@ -102,7 +101,7 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    print("DEBUG: MainScreen build index: $_currentIndex");
+    debugPrint("MainScreen build index: $_currentIndex");
     return Scaffold(
       backgroundColor: AppColors.backgroundDark,
       body: SafeArea(
@@ -160,9 +159,7 @@ class _MainScreenState extends State<MainScreen> {
             final measurement = _liveWindSummary[loc.name];
             final isFresh = measurement != null && measurement.isCurrentlyFresh;
             final wind = isFresh ? measurement.baseWind : null;
-            final status = isFresh
-                ? (index == 0 ? "Steigt stetig" : "Nächster Check • ${data.nextCheck}")
-                : "Überwachungsfenster inaktiv";
+            final status = isFresh ? "Frische Messung" : "Keine frische Messung";
             
             return LocationOverviewCard(
               location: data,
@@ -176,7 +173,7 @@ class _MainScreenState extends State<MainScreen> {
                 MaterialPageRoute(builder: (_) => LocationScreen(location: loc))
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );
@@ -218,7 +215,7 @@ class _MainScreenState extends State<MainScreen> {
                     leading: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: data.accentColor.withOpacity(0.1),
+                        color: data.accentColor.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: FaIcon(data.icon, color: data.accentColor, size: 20),
@@ -257,7 +254,7 @@ class _MainScreenState extends State<MainScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.history_rounded, size: 64, color: AppColors.textMuted.withOpacity(0.5)),
+          Icon(Icons.history_rounded, size: 64, color: AppColors.textMuted.withValues(alpha: 0.5)),
           const SizedBox(height: 16),
           Text(
             "Verlauf wird geladen...",
@@ -299,7 +296,7 @@ class _MainScreenState extends State<MainScreen> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: AppColors.accentTeal.withOpacity(0.1),
+                        color: AppColors.accentTeal.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.notifications_active_rounded, color: AppColors.accentTeal, size: 24),
@@ -335,7 +332,7 @@ class _MainScreenState extends State<MainScreen> {
                   width: double.infinity,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accentTeal.withOpacity(0.15),
+                      backgroundColor: AppColors.accentTeal.withValues(alpha: 0.15),
                       foregroundColor: AppColors.accentTeal,
                       shadowColor: Colors.transparent,
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -365,7 +362,7 @@ class _MainScreenState extends State<MainScreen> {
                   width: double.infinity,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accentMint.withOpacity(0.15),
+                      backgroundColor: AppColors.accentMint.withValues(alpha: 0.15),
                       foregroundColor: AppColors.accentMint,
                       shadowColor: Colors.transparent,
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -402,14 +399,14 @@ class _MainScreenState extends State<MainScreen> {
     return Container(
       padding: const EdgeInsets.only(bottom: 24, left: 16, right: 16, top: 8),
       decoration: BoxDecoration(
-        color: AppColors.backgroundDark.withOpacity(0.9),
+        color: AppColors.backgroundDark.withValues(alpha: 0.9),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
           onTap: _onTabTapped,
-          backgroundColor: AppColors.glassCard.withOpacity(0.8),
+          backgroundColor: AppColors.glassCard.withValues(alpha: 0.8),
           elevation: 0,
           selectedItemColor: AppColors.accentTeal,
           unselectedItemColor: AppColors.textMuted,

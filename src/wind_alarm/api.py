@@ -42,7 +42,7 @@ def check_rate_limit(client_id: str) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
-    print(f"Starting Wind Alarm API (version=1.0.0)")
+    print("Starting Wind Alarm API (version=1.0.0)")
     yield
     print("Shutting down Wind Alarm API")
 
@@ -56,7 +56,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -161,20 +161,30 @@ async def get_measurement_history(location: str, hours: int = 24, _: str = Depen
         raise HTTPException(status_code=400, detail="Invalid location format")
 
     from wind_alarm.config import config
-    if config.USE_AWS:
+    source = "history"
+    if config.USE_AWS or config.USE_AZURE:
         try:
-            from aws.knowledge_base import get_recent_measurements
+            if config.USE_AWS:
+                source = "DynamoDB"
+                from aws.knowledge_base import get_recent_measurements
+            else:
+                source = "Cosmos DB"
+                from azure.knowledge_base import get_recent_measurements
             items = get_recent_measurements(location, hours)
             return [
                 HistoryItem(
-                    observed_at=item.get("observed_at"),
+                    observed_at=item.get("observed_at") or "",
                     base_wind=float(item.get("base_wind_knots", 0.0)),
                     gust=float(item.get("gust_knots", 0.0)),
                 )
                 for item in items
+                if item.get("observed_at")
             ]
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"Failed to fetch history from DynamoDB: {str(exc)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to fetch history from {source}: {str(exc)}",
+            ) from exc
     else:
         # Local development mock history
         now = datetime.now(timezone.utc)
@@ -203,7 +213,7 @@ async def get_all_measurements(_: str = Depends(verify_api_key)):
 @app.post("/trigger/{location}")
 async def trigger_measurement(
     location: str,
-    request: TriggerRequest = Depends(),
+    request: TriggerRequest,
     _: str = Depends(verify_api_key),
 ):
     if not location or not location.replace("_", "").replace("-", "").isalnum():

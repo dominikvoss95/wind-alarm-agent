@@ -22,9 +22,9 @@ class CriteriaItem extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
-        color: AppColors.backgroundCard.withOpacity(0.5),
+        color: AppColors.backgroundCard.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.subtleBorder.withOpacity(0.5)),
+        border: Border.all(color: AppColors.subtleBorder.withValues(alpha: 0.5)),
       ),
       child: Row(
         children: [
@@ -58,7 +58,7 @@ class CriteriaItem extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.subtleBorder.withOpacity(0.3),
+                color: AppColors.subtleBorder.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(

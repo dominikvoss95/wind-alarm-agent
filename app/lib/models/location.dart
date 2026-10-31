@@ -15,6 +15,7 @@ class LocationData {
   final String nextCheck;
   final String defaultDirection;
   final String heroImageUrl;
+  final double alarmThresholdKnots;
 
   LocationData({
     required this.id,
@@ -27,6 +28,7 @@ class LocationData {
     required this.nextCheck,
     required this.defaultDirection,
     required this.heroImageUrl,
+    required this.alarmThresholdKnots,
   });
 }
 
@@ -53,6 +55,7 @@ final Map<WindLocation, LocationData> appLocations = {
     nextCheck: 'alle 5 Min.',
     defaultDirection: 'SW',
     heroImageUrl: 'assets/images/kochelsee.png',
+    alarmThresholdKnots: 10,
     webcams: [
       WebcamData(
         name: 'Trimini',
@@ -71,6 +74,7 @@ final Map<WindLocation, LocationData> appLocations = {
     nextCheck: 'alle 5 Min.',
     defaultDirection: 'N',
     heroImageUrl: 'assets/images/gardasee.png',
+    alarmThresholdKnots: 12,
     webcams: [
       WebcamData(
         name: 'Malcesine Nord',

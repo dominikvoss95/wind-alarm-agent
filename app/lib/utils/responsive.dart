@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 
 class Responsive extends StatelessWidget {
@@ -13,12 +12,17 @@ class Responsive extends StatelessWidget {
     this.desktop,
   });
 
-  static bool get isMobile => MediaQueryData.fromWindow(window).size.width < 600;
-  static bool get isTablet => MediaQueryData.fromWindow(window).size.width >= 600 && MediaQueryData.fromWindow(window).size.width < 1200;
-  static bool get isDesktop => MediaQueryData.fromWindow(window).size.width >= 1200;
+  static MediaQueryData get _view {
+    final view = WidgetsBinding.instance.platformDispatcher.views.first;
+    return MediaQueryData.fromView(view);
+  }
 
-  static double get screenWidth => MediaQueryData.fromWindow(window).size.width;
-  static double get screenHeight => MediaQueryData.fromWindow(window).size.height;
+  static bool get isMobile => _view.size.width < 600;
+  static bool get isTablet => _view.size.width >= 600 && _view.size.width < 1200;
+  static bool get isDesktop => _view.size.width >= 1200;
+
+  static double get screenWidth => _view.size.width;
+  static double get screenHeight => _view.size.height;
 
   static double wp(double percent) => screenWidth * percent;
   static double hp(double percent) => screenHeight * percent;

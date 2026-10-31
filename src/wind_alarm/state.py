@@ -28,5 +28,7 @@ class WindGraphState(TypedDict, total=False):
     is_fresh: bool
     threshold_exceeded: bool
     notification_sent: bool
+    # Set by the aggregator so each webcam run does not send its own push.
+    skip_notification: bool
 
     error_message: str

@@ -14,10 +14,10 @@ from typing import AsyncIterator, Dict
 
 from playwright.async_api import async_playwright, BrowserContext, Page
 
-from wind_vision.core.config import config
-from wind_vision.core.logger import get_logger
+from wind_alarm.config import config
+from wind_alarm.logger import get_logger
 
-logger = get_logger("wind_vision.fetcher")
+logger = get_logger("wind_alarm.fetcher")
 
 # ── config ───────────────────────────────────────────────────────────
 CAM_ID = config.get("webcam.cam_id")

@@ -92,9 +92,9 @@ class _ForecastCardState extends State<ForecastCard> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: confColor.withOpacity(0.15),
+                  color: confColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: confColor.withOpacity(0.3), width: 1),
+                  border: Border.all(color: confColor.withValues(alpha: 0.3), width: 1),
                 ),
                 child: Text(
                   "KONFIDENZ: $confText",
@@ -237,7 +237,7 @@ class _ForecastCardState extends State<ForecastCard> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.15),
+              color: Colors.black.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: AppColors.subtleBorder),
             ),
@@ -330,7 +330,7 @@ class _ForecastCardState extends State<ForecastCard> {
                   ],
                 ),
               );
-            }).toList(),
+            }),
           ],
         ],
       ),

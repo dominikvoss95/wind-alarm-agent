@@ -42,9 +42,9 @@ class AppTheme {
       ),
       sliderTheme: SliderThemeData(
         activeTrackColor: AppColors.accentMint,
-        inactiveTrackColor: AppColors.accentMint.withOpacity(0.2),
+        inactiveTrackColor: AppColors.accentMint.withValues(alpha: 0.2),
         thumbColor: AppColors.accentMint,
-        overlayColor: AppColors.accentMint.withOpacity(0.1),
+        overlayColor: AppColors.accentMint.withValues(alpha: 0.1),
         trackHeight: 4,
       ),
     );

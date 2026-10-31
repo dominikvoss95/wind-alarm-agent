@@ -1,5 +1,7 @@
 # Wind Alarm Development Toolset
 
+export PYTHONPATH := src:.
+
 .PHONY: help setup run test lint scan build push-image tf-init tf-plan tf-apply up down clean
 
 help: ## Show this help message

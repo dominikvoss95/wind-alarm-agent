@@ -54,6 +54,19 @@ def test_scrape_forecast_sources(mock_playwright):
     assert "foehn_diagram" in res
 
 
+@patch("wind_alarm.forecast.forecast_runner.scrape_forecast_sources", return_value={})
+@patch("wind_alarm.forecast.forecast_runner.analyze_forecasts", return_value={"summary": "ok"})
+@patch("azure.knowledge_base.update_blob_forecast")
+def test_run_forecast_uploads_to_azure(mock_upload, _mock_analyze, _mock_scrape):
+    """Azure runs must publish the forecast, not only write a local file."""
+    with patch("wind_alarm.config.config.USE_AWS", False), \
+         patch("wind_alarm.config.config.USE_AZURE", True):
+        result = run_forecast("gardasee")
+    assert result["summary"] == "ok"
+    mock_upload.assert_called_once()
+    assert mock_upload.call_args.args[0] == "gardasee"
+
+
 def test_analyze_forecasts_local_mode():
     """Test analyzer behavior in local mode (USE_AWS = False)."""
     with patch("wind_alarm.config.config.USE_AWS", False):

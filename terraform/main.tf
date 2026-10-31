@@ -169,7 +169,7 @@ resource "aws_lambda_function" "wind_alarm" {
 # EventBridge rule for scheduled execution
 resource "aws_cloudwatch_event_rule" "morning_check" {
   name                = "wind-alarm-morning-check"
-  description         = "Triggers wind alarm every 5 minutes between 5:00 and 7:00 CEST (3:00 - 5:00 UTC)"
+  description         = "Triggers wind alarm every 5 minutes from 03:00 through 04:55 UTC (05:00-06:55 CEST)"
   schedule_expression = "cron(*/5 3-4 * * ? *)"
 }
 
