@@ -24,8 +24,14 @@ def main():
         content = content.replace("/* Begin PBXBuildFile section */\n", "/* Begin PBXBuildFile section */\n" + build_file_entry)
         print("Added to PBXBuildFile section.")
 
-    # 2. Add to PBXFileReference section
-    file_ref_entry = f"\t\t{file_ref_id} /* alarm_sound.mp3 */ = {{isa = PBXFileReference; lastKnownFileType = audio.mp3; name = alarm_sound.mp3; path = Runner/alarm_sound.mp3; sourceTree = \"<group>\"; }};\n"
+    # Path is relative to the Runner group (path = Runner). A "Runner/" prefix
+    # resolves to ios/Runner/Runner/alarm_sound.mp3, which Xcode cannot open.
+    file_ref_entry = f"\t\t{file_ref_id} /* alarm_sound.mp3 */ = {{isa = PBXFileReference; lastKnownFileType = audio.mp3; path = alarm_sound.mp3; sourceTree = \"<group>\"; }};\n"
+    bad_ref = '{isa = PBXFileReference; lastKnownFileType = audio.mp3; name = alarm_sound.mp3; path = Runner/alarm_sound.mp3; sourceTree = "<group>"; }'
+    good_ref = '{isa = PBXFileReference; lastKnownFileType = audio.mp3; path = alarm_sound.mp3; sourceTree = "<group>"; }'
+    if bad_ref in content:
+        content = content.replace(bad_ref, good_ref)
+        print("Corrected alarm_sound.mp3 path (it is relative to the Runner group).")
     if "alarm_sound.mp3 */ = {isa = PBXFileReference" not in content:
         content = content.replace("/* Begin PBXFileReference section */\n", "/* Begin PBXFileReference section */\n" + file_ref_entry)
         print("Added to PBXFileReference section.")
