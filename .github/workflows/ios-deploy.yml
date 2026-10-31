@@ -3,88 +3,278 @@ name: iOS Build & TestFlight
 on:
   push:
     branches: [ main ]
+  pull_request:
+    paths:
+      - 'app/**'
+      - '.github/workflows/ios-deploy.yml'
+      - 'scripts/add_ios_sound.py'
   workflow_dispatch:
 
+# Pull requests only compile the unsigned iOS app. Signing and TestFlight
+# upload run on pushes to main and on workflow_dispatch, and those steps are
+# the only ones that read the App Store Connect secrets.
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  FLUTTER_VERSION: '3.47.9'
+  XCODE_VERSION: '26.6'
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: ios-deploy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   deploy:
     name: Build & Deploy to TestFlight
-    runs-on: macos-latest
-    
+    runs-on: macos-26
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash --noprofile --norc -euo pipefail {0}
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Select latest stable Xcode
+      - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Show Xcode version
+        run: xcodebuild -version
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
           cache: true
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v6
+        with:
+          path: app/ios/Pods
+          key: ${{ runner.os }}-pods-ios15-${{ hashFiles('app/pubspec.lock', 'app/ios/Podfile', 'app/ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-ios15-
 
       - name: Install dependencies
         run: |
           cd app
           flutter pub get
 
-      - name: Prepare App Store Connect API Key
-        env:
-          APP_STORE_CONNECT_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}
-        run: |
-          mkdir -p ~/private_keys
-          echo "$APP_STORE_CONNECT_KEY_CONTENT" > ~/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8
-
-      - name: Inject Team ID into Xcode Project
-        run: |
-          sed -i '' "s/REPLACE_WITH_YOUR_TEAM_ID/${{ secrets.APPLE_TEAM_ID }}/g" app/ios/Runner.xcodeproj/project.pbxproj
-
       - name: Disable Swift Package Manager
         run: flutter config --no-enable-swift-package-manager
 
-      - name: Build Flutter iOS Release
+      - name: Build Flutter iOS release
         run: |
           cd app
-          flutter build ios --release --no-codesign
+          log="build/ios/logs/flutter-ios-build.log"
+          mkdir -p build/ios/logs
+          set +e
+          flutter build ios --release --no-codesign --build-number="${GITHUB_RUN_NUMBER}" >"${log}" 2>&1
+          status=$?
+          set -e
+          if [[ "${status}" -ne 0 ]]; then
+            echo "::error::flutter build ios failed with exit ${status}"
+            echo "::group::Matching error lines"
+            grep -nE 'error:|Error \(|Failed to build|Could not|couldn’t be opened|fatal error:' "${log}" | tail -n 100 || true
+            echo "::endgroup::"
+            echo "::group::Build log tail"
+            tail -n 160 "${log}"
+            echo "::endgroup::"
+            exit "${status}"
+          fi
+          echo "flutter build ios succeeded (build number ${GITHUB_RUN_NUMBER})"
 
-      - name: Build and Sign Archive
+      - name: Prepare App Store Connect API key
+        if: success() && github.event_name != 'pull_request'
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}
         run: |
+          if [[ -z "${APP_STORE_CONNECT_KEY_ID}" || -z "${APP_STORE_CONNECT_KEY_CONTENT}" ]]; then
+            echo "::error::APP_STORE_CONNECT_KEY_ID or APP_STORE_CONNECT_KEY_CONTENT is empty"
+            exit 1
+          fi
+          umask 077
+          mkdir -p "${HOME}/private_keys"
+          key_path="${HOME}/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          printf '%s\n' "${APP_STORE_CONNECT_KEY_CONTENT}" > "${key_path}"
+          chmod 600 "${key_path}"
+          if ! grep -q 'PRIVATE KEY' "${key_path}"; then
+            echo "::error::App Store Connect API key is not a PEM private key"
+            exit 1
+          fi
+
+      - name: Inject Team ID
+        if: success() && github.event_name != 'pull_request'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [[ -z "${APPLE_TEAM_ID}" ]]; then
+            echo "::error::APPLE_TEAM_ID is empty"
+            exit 1
+          fi
+          if [[ ! "${APPLE_TEAM_ID}" =~ ^[A-Za-z0-9]{10}$ ]]; then
+            echo "::error::APPLE_TEAM_ID must be a 10-character Apple team id"
+            exit 1
+          fi
+          files=(
+            app/ios/Runner.xcodeproj/project.pbxproj
+            app/ios/ExportOptions.plist
+          )
+          for file in "${files[@]}"; do
+            if ! grep -q 'REPLACE_WITH_YOUR_TEAM_ID' "${file}"; then
+              echo "::error::Placeholder REPLACE_WITH_YOUR_TEAM_ID not found in ${file}"
+              exit 1
+            fi
+            sed -i '' "s/REPLACE_WITH_YOUR_TEAM_ID/${APPLE_TEAM_ID}/g" "${file}"
+          done
+
+      - name: Archive and sign
+        if: success() && github.event_name != 'pull_request'
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          if [[ -z "${APP_STORE_CONNECT_KEY_ID}" || -z "${APP_STORE_CONNECT_ISSUER_ID}" ]]; then
+            echo "::error::APP_STORE_CONNECT_KEY_ID or APP_STORE_CONNECT_ISSUER_ID is empty"
+            exit 1
+          fi
+          key_path="${HOME}/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          if [[ ! -s "${key_path}" ]]; then
+            echo "::error::App Store Connect API key file is missing"
+            exit 1
+          fi
+          mkdir -p app/build/ios/archive app/build/ios/logs
+          log="app/build/ios/logs/xcodebuild-archive.log"
+          set +e
           xcodebuild archive \
             -workspace app/ios/Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
             -destination "generic/platform=iOS" \
             -archivePath app/build/ios/archive/Runner.xcarchive \
+            -derivedDataPath app/build/ios/DerivedData \
             -allowProvisioningUpdates \
-            -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
-            -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
-            -authenticationKeyPath "$HOME/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8"
+            -authenticationKeyID "${APP_STORE_CONNECT_KEY_ID}" \
+            -authenticationKeyIssuerID "${APP_STORE_CONNECT_ISSUER_ID}" \
+            -authenticationKeyPath "${key_path}" \
+            >"${log}" 2>&1
+          status=$?
+          set -e
+          if [[ "${status}" -ne 0 ]]; then
+            echo "::error::xcodebuild archive failed with exit ${status}"
+            echo "::group::Matching error lines"
+            grep -nE 'error:|fatal error:|ARCHIVE FAILED' "${log}" | tail -n 100 || true
+            echo "::endgroup::"
+            echo "::group::Archive log tail"
+            tail -n 160 "${log}"
+            echo "::endgroup::"
+            exit "${status}"
+          fi
+          if [[ ! -d app/build/ios/archive/Runner.xcarchive ]]; then
+            echo "::error::Archive was not created at app/build/ios/archive/Runner.xcarchive"
+            exit 1
+          fi
 
       - name: Export IPA
+        if: success() && github.event_name != 'pull_request'
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          sed -i '' "s/REPLACE_WITH_YOUR_TEAM_ID/${{ secrets.APPLE_TEAM_ID }}/g" app/ios/ExportOptions.plist
+          key_path="${HOME}/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          if ! grep -q '<string>app-store-connect</string>' app/ios/ExportOptions.plist; then
+            echo "::error::ExportOptions.plist method is not app-store-connect"
+            exit 1
+          fi
+          if grep -q 'REPLACE_WITH_YOUR_TEAM_ID' app/ios/ExportOptions.plist; then
+            echo "::error::ExportOptions.plist still contains the team id placeholder"
+            exit 1
+          fi
+          mkdir -p app/build/ios/ipa app/build/ios/logs
+          log="app/build/ios/logs/xcodebuild-export.log"
+          set +e
           xcodebuild -exportArchive \
             -archivePath app/build/ios/archive/Runner.xcarchive \
             -exportPath app/build/ios/ipa \
             -exportOptionsPlist app/ios/ExportOptions.plist \
             -allowProvisioningUpdates \
-            -authenticationKeyID "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
-            -authenticationKeyIssuerID "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" \
-            -authenticationKeyPath "$HOME/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8"
+            -authenticationKeyID "${APP_STORE_CONNECT_KEY_ID}" \
+            -authenticationKeyIssuerID "${APP_STORE_CONNECT_ISSUER_ID}" \
+            -authenticationKeyPath "${key_path}" \
+            >"${log}" 2>&1
+          status=$?
+          set -e
+          if [[ "${status}" -ne 0 ]]; then
+            echo "::error::xcodebuild -exportArchive failed with exit ${status}"
+            echo "::group::Matching error lines"
+            grep -nE 'error:|fatal error:|EXPORT FAILED' "${log}" | tail -n 100 || true
+            echo "::endgroup::"
+            echo "::group::Export log tail"
+            tail -n 160 "${log}"
+            echo "::endgroup::"
+            exit "${status}"
+          fi
 
-      - name: Find IPA path
-        id: find_ipa
-        run: echo "ipa_path=$(find app/build/ios/ipa -name '*.ipa' | head -1)" >> $GITHUB_OUTPUT
+      - name: Verify IPA
+        id: ipa
+        if: success() && github.event_name != 'pull_request'
+        run: |
+          shopt -s nullglob
+          ipas=(app/build/ios/ipa/*.ipa)
+          if [[ ${#ipas[@]} -eq 0 ]]; then
+            echo "::error::No IPA was produced in app/build/ios/ipa"
+            ls -la app/build/ios/ipa || true
+            exit 1
+          fi
+          ipa="${ipas[0]}"
+          bytes="$(stat -f%z "${ipa}")"
+          if [[ "${bytes}" -lt 1000000 ]]; then
+            echo "::error::IPA looks too small (${bytes} bytes): ${ipa}"
+            exit 1
+          fi
+          echo "IPA ready: ${ipa} (${bytes} bytes)"
+          echo "ipa_path=${ipa}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload to TestFlight
-        uses: apple-actions/upload-testflight-build@v1
+        if: success() && github.event_name != 'pull_request'
+        uses: apple-actions/upload-testflight-build@v5
         with:
-          app-path: ${{ steps.find_ipa.outputs.ipa_path }}
+          app-path: ${{ steps.ipa.outputs.ipa_path }}
           issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           api-private-key: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}
+          backend: appstore-api
+          wait-for-processing: 'false'
+          uses-non-exempt-encryption: 'false'
+
+      - name: Remove App Store Connect API key
+        if: always() && github.event_name != 'pull_request'
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+        run: |
+          if [[ -n "${APP_STORE_CONNECT_KEY_ID}" ]]; then
+            rm -f "${HOME}/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          fi
+          rmdir "${HOME}/private_keys" 2>/dev/null || true
+
+      - name: Upload Xcode build logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-build-logs-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            app/build/ios/logs/**
+            app/build/ios/DerivedData/**/Logs/**
