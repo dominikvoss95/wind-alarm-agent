@@ -1,339 +1,340 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../services/wind_api_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/spot_presentation.dart';
+import 'mira_controls.dart';
 
 class ForecastCard extends StatefulWidget {
   final WindForecast forecast;
-  final Color accentColor;
+  final DateTime now;
 
-  const ForecastCard({
-    super.key,
-    required this.forecast,
-    required this.accentColor,
-  });
+  const ForecastCard({super.key, required this.forecast, required this.now});
 
   @override
   State<ForecastCard> createState() => _ForecastCardState();
 }
 
 class _ForecastCardState extends State<ForecastCard> {
-  bool _isExpanded = false;
-
-  Color _getConfidenceColor(String confidence) {
-    switch (confidence.toLowerCase()) {
-      case 'high':
-        return AppColors.statusGreen;
-      case 'medium':
-        return Colors.orangeAccent;
-      case 'low':
-      default:
-        return Colors.redAccent;
-    }
-  }
-
-  String _translateConfidence(String confidence) {
-    switch (confidence.toLowerCase()) {
-      case 'high':
-        return 'HOCH';
-      case 'medium':
-        return 'MITTEL';
-      case 'low':
-      default:
-        return 'NIEDRIG';
-    }
-  }
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
-    final confColor = _getConfidenceColor(widget.forecast.confidence);
-    final confText = _translateConfidence(widget.forecast.confidence);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 24),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.backgroundCard,
-        borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: AppColors.subtleBorder, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final mira = context.mira;
+    final forecast = widget.forecast;
+    final sources = forecast.sourcesAnalyzed;
+    final header = <Widget>[
+      Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          // Header: Title and Confidence Badge
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.psychology_rounded,
-                      color: widget.accentColor,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        "KI-METEOROLOGE",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
-                          letterSpacing: 1.0,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
-                  color: confColor.withValues(alpha: 0.15),
+                  color: mira.accent.withValues(alpha: MiraColors.pillTint),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: confColor.withValues(alpha: 0.3), width: 1),
                 ),
-                child: Text(
-                  "KONFIDENZ: $confText",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: confColor,
-                    letterSpacing: 0.5,
-                  ),
-                ),
+                child: Icon(Icons.psychology_rounded, color: mira.accent, size: 20),
               ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // Main Info: Probability ring and Expected Wind details
-          Row(
-            children: [
-              // Probability Ring
-              Stack(
-                alignment: Alignment.center,
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: 80,
-                    height: 80,
-                    child: CircularProgressIndicator(
-                      value: widget.forecast.windProbabilityPercent / 100.0,
-                      strokeWidth: 8,
-                      backgroundColor: AppColors.subtleBorder,
-                      color: widget.accentColor,
-                      strokeCap: StrokeCap.round,
-                    ),
-                  ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        "${widget.forecast.windProbabilityPercent}%",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      Text(
-                        "CHANCE",
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 8,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textMuted,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
+                  Text('KI-Prognose', style: mira.title),
+                  Text(tomorrowCaption(widget.now), style: mira.caption),
                 ],
               ),
-              const SizedBox(width: 24),
-
-              // Wind details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "ERWARTETER WIND",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textMuted,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "${widget.forecast.expectedWindMin} - ${widget.forecast.expectedWindMax} kts",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 6,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.navigation_rounded, color: AppColors.textSecondary, size: 14),
-                            const SizedBox(width: 4),
-                            Text(
-                              "Richtung: ${widget.forecast.expectedDirection}",
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.access_time_filled_rounded, color: AppColors.textSecondary, size: 14),
-                            const SizedBox(width: 4),
-                            Text(
-                              widget.forecast.bestTimeWindow,
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
-          const SizedBox(height: 24),
-
-          // German Summary
-          Text(
-            widget.forecast.summary,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Model Consensus
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.subtleBorder),
-            ),
+          _ConfidenceChip(confidence: forecast.confidence),
+        ],
+      ),
+      const SizedBox(height: 20),
+      Row(
+        children: [
+          _ChanceRing(percent: forecast.windProbabilityPercent),
+          const SizedBox(width: 20),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  "MODELL-KONSENS",
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    color: widget.accentColor,
-                    letterSpacing: 0.5,
+                const MiraLabel('Erwartet'),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text.rich(
+                    TextSpan(
+                      style: mira.h1,
+                      children: [
+                        TextSpan(text: '${forecast.expectedWindMin}–${forecast.expectedWindMax} '),
+                        TextSpan(text: 'kts', style: mira.title.copyWith(color: mira.textSecondary)),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  widget.forecast.modelConsensus,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                    height: 1.3,
-                  ),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
+                  children: [
+                    _Meta(
+                      icon: Icons.north_rounded,
+                      label: 'aus ${forecast.expectedDirection}',
+                      rotation: ((bearingOf(forecast.expectedDirection) ?? 0) + 180) * math.pi / 180,
+                    ),
+                    _Meta(
+                      icon: Icons.schedule_outlined,
+                      label: compactHourWindow(forecast.bestTimeWindow),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
+        ],
+      ),
+    ];
+    if (forecast.summary.isNotEmpty) {
+      header
+        ..add(const SizedBox(height: 18))
+        ..add(Text(forecast.summary, style: mira.body));
+    }
 
-          // Expandable Source Breakdown Button
-          InkWell(
-            onTap: () {
-              setState(() {
-                _isExpanded = !_isExpanded;
-              });
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Einzelne Quellen ansehen",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  Icon(
-                    _isExpanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    color: AppColors.textSecondary,
-                  ),
-                ],
-              ),
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: mira.surface,
+        borderRadius: BorderRadius.circular(MiraSpace.radius),
+        border: Border.all(color: mira.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(MiraSpace.card, MiraSpace.card, MiraSpace.card, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: header,
             ),
           ),
-
-          // Expandable Content
-          if (_isExpanded) ...[
-            const SizedBox(height: 8),
-            const Divider(color: AppColors.subtleBorder),
-            const SizedBox(height: 8),
-            ...widget.forecast.sourcesAnalyzed.map((source) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      source.name,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                      ),
+          const SizedBox(height: 16),
+          Container(height: 1, color: mira.outline),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(MiraSpace.card, 0, 12, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                InkWell(
+                  onTap: sources.isEmpty ? null : () => setState(() => _expanded = !_expanded),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 56),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Modell-Konsens', style: mira.title.copyWith(fontSize: 15)),
+                              Text(
+                                forecast.modelConsensus.isEmpty ? 'Keine Modellangabe' : forecast.modelConsensus,
+                                style: mira.caption,
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (sources.isNotEmpty)
+                          Icon(
+                            _expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                            color: mira.textSecondary,
+                          ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      source.summary,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11,
-                        color: AppColors.textMuted,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              );
-            }),
-          ],
+                if (_expanded)
+                  for (final source in sources)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(source.name, style: mira.title.copyWith(fontSize: 15)),
+                          const SizedBox(height: 2),
+                          Text(source.summary, style: mira.caption),
+                        ],
+                      ),
+                    ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
+}
+
+
+class _Meta extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final double rotation;
+
+  const _Meta({required this.icon, required this.label, this.rotation = 0});
+
+  @override
+  Widget build(BuildContext context) {
+    final mira = context.mira;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Transform.rotate(
+          angle: rotation,
+          child: Icon(icon, size: 16, color: mira.accent),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: mira.caption.copyWith(color: mira.textPrimary, fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+}
+
+class _ConfidenceChip extends StatelessWidget {
+  final String confidence;
+
+  const _ConfidenceChip({required this.confidence});
+
+  @override
+  Widget build(BuildContext context) {
+    final mira = context.mira;
+    final level = _level(confidence);
+    return Container(
+      height: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: mira.surface2,
+        borderRadius: BorderRadius.circular(MiraSpace.radiusPill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Konfidenz ${_label(confidence)}',
+            style: mira.caption.copyWith(color: mira.textPrimary, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (var index = 0; index < 3; index++)
+                Container(
+                  width: 3,
+                  height: 6.0 + index * 3,
+                  margin: const EdgeInsets.only(left: 2),
+                  decoration: BoxDecoration(
+                    color: index < level ? mira.accent : MiraColors.windTooLittle,
+                    borderRadius: BorderRadius.circular(1),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  int _level(String raw) {
+    switch (raw.toLowerCase()) {
+      case 'high':
+        return 3;
+      case 'medium':
+        return 2;
+      default:
+        return 1;
+    }
+  }
+
+  String _label(String raw) {
+    switch (raw.toLowerCase()) {
+      case 'high':
+        return 'hoch';
+      case 'medium':
+        return 'mittel';
+      case 'low':
+        return 'niedrig';
+      default:
+        return raw.toLowerCase();
+    }
+  }
+}
+
+class _ChanceRing extends StatelessWidget {
+  final int percent;
+
+  const _ChanceRing({required this.percent});
+
+  @override
+  Widget build(BuildContext context) {
+    final mira = context.mira;
+    final value = (percent.clamp(0, 100)) / 100;
+    return SizedBox(
+      width: 96,
+      height: 96,
+      child: CustomPaint(
+        painter: _RingPainter(value: value, track: mira.outline, color: mira.accent),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('$percent%', style: mira.h2.copyWith(fontSize: 24, height: 28 / 24, fontWeight: FontWeight.w800)),
+              Text('Chance', style: mira.caption.copyWith(fontSize: 11, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  final double value;
+  final Color track;
+  final Color color;
+
+  _RingPainter({required this.value, required this.track, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 4.5;
+    final base = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 9
+      ..strokeCap = StrokeCap.round
+      ..color = track;
+    canvas.drawCircle(center, radius, base);
+    final sweep = 2 * math.pi * value;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      sweep,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 9
+        ..strokeCap = StrokeCap.round
+        ..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _RingPainter oldDelegate) => oldDelegate.value != value;
 }

@@ -1,15 +1,19 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart';
+
 import '../models/location.dart';
-import '../theme/app_theme.dart';
-import '../widgets/location_card.dart';
-import 'location_screen.dart';
-import '../utils/alarm_utils.dart';
 import '../services/wind_api_service.dart';
+import '../utils/alarm_history.dart';
+import '../utils/alarm_status.dart';
+import '../utils/alarm_utils.dart';
+import '../widgets/activity_dashboard.dart';
+import '../widgets/home_dashboard.dart';
+import '../widgets/mira_scaffold.dart';
+import '../widgets/places_dashboard.dart';
+import '../widgets/setup_dashboard.dart';
+import 'location_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -20,9 +24,25 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
-  final List<bool> _isMonitoringArmed = [true, false]; // Kochelsee, Gardasee
+  final List<bool> _isMonitoringArmed = [true, false];
   final Map<String, WindMeasurement> _liveWindSummary = {};
+  final Map<String, WindForecast> _forecastSummary = {};
+  final Map<String, List<WindHistoryItem>> _history = {};
+  final Set<String> _reloading = {};
   Timer? _pollingTimer;
+  bool _measurementsSettled = false;
+  bool _activityLoading = true;
+  AlarmChannelStatus _alarmStatus = AlarmChannelStatus.checking;
+  DateTime? _lastTestAt;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchForecasts();
+    _loadHistory();
+    _loadAlarmStatus();
+    _startPolling();
+  }
 
   Future<void> _toggleMonitoring(int index, bool isArmed, LocationData data) async {
     setState(() {
@@ -32,35 +52,44 @@ class _MainScreenState extends State<MainScreen> {
     try {
       if (isArmed) {
         await FirebaseMessaging.instance.subscribeToTopic(data.fcmTopic);
-        debugPrint("Subscribed to topic: ${data.fcmTopic}");
+        debugPrint('Subscribed to topic: ${data.fcmTopic}');
       } else {
         await FirebaseMessaging.instance.unsubscribeFromTopic(data.fcmTopic);
-        debugPrint("Unsubscribed from topic: ${data.fcmTopic}");
+        debugPrint('Unsubscribed from topic: ${data.fcmTopic}');
       }
-    } catch (e) {
-      debugPrint("Error updating topic subscription: $e");
+    } catch (error) {
+      debugPrint('Error updating topic subscription: $error');
     }
-  }
-
-  final Map<String, WindForecast> _forecastSummary = {};
-
-  @override
-  void initState() {
-    super.initState();
-    debugPrint("MainScreen initState");
-    _fetchForecasts();
-    _startPolling();
   }
 
   Future<void> _fetchForecasts() async {
-    for (var loc in WindLocation.values) {
-      final forecast = await WindApiService.getForecast(loc.name.toLowerCase());
+    for (final location in WindLocation.values) {
+      final forecast = await WindApiService.getForecast(location.name.toLowerCase());
       if (forecast != null && mounted) {
         setState(() {
-          _forecastSummary[loc.name] = forecast;
+          _forecastSummary[location.name] = forecast;
         });
       }
     }
+  }
+
+  Future<void> _loadHistory() async {
+    final next = <String, List<WindHistoryItem>>{};
+    for (final location in WindLocation.values) {
+      next[location.name] = await WindApiService.getHistory(location.name.toLowerCase());
+      if (!mounted) return;
+    }
+    setState(() {
+      _history
+        ..clear()
+        ..addAll(next);
+      _activityLoading = false;
+    });
+  }
+
+  Future<void> _loadAlarmStatus() async {
+    final status = await AlarmChannelStatus.resolve();
+    if (mounted) setState(() => _alarmStatus = status);
   }
 
   void _startPolling() {
@@ -74,17 +103,52 @@ class _MainScreenState extends State<MainScreen> {
     final measurements = await WindApiService.getAllMeasurements();
     if (!mounted) return;
     setState(() {
+      _measurementsSettled = true;
       measurements.forEach((key, measurement) {
         if (measurement != null) {
           try {
-            final loc = WindLocation.values.firstWhere(
-              (l) => l.name.toLowerCase() == key.toLowerCase()
+            final location = WindLocation.values.firstWhere(
+              (item) => item.name.toLowerCase() == key.toLowerCase(),
             );
-            _liveWindSummary[loc.name] = measurement;
+            _liveWindSummary[location.name] = measurement;
           } catch (_) {}
         }
       });
     });
+  }
+
+  Future<void> _reloadLocation(WindLocation location) async {
+    setState(() => _reloading.add(location.name));
+    final measurement = await WindApiService.getMeasurement(location.name.toLowerCase());
+    final history = await WindApiService.getHistory(location.name.toLowerCase());
+    if (!mounted) return;
+    setState(() {
+      _reloading.remove(location.name);
+      _measurementsSettled = true;
+      if (measurement != null) _liveWindSummary[location.name] = measurement;
+      _history[location.name] = history;
+    });
+  }
+
+  Future<void> _openLocation(WindLocation location) async {
+    final index = WindLocation.values.indexOf(location);
+    final next = await Navigator.push<int>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationScreen(
+          location: location,
+          monitoringArmed: index >= 0 && index < _isMonitoringArmed.length && _isMonitoringArmed[index],
+        ),
+      ),
+    );
+    if (next != null && mounted) {
+      setState(() => _currentIndex = next);
+    }
+  }
+
+  Future<void> _sendTest(String locationName, int hour, int minute) async {
+    await triggerAlarmLogic(hour: hour, minute: minute, locationName: locationName);
+    if (mounted) setState(() => _lastTestAt = DateTime.now());
   }
 
   @override
@@ -93,335 +157,51 @@ class _MainScreenState extends State<MainScreen> {
     super.dispose();
   }
 
-  void _onTabTapped(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
+  List<HomeSpotData> _spots(DateTime now) {
+    return WindLocation.values.asMap().entries.map((entry) {
+      final index = entry.key;
+      final location = entry.value;
+      final data = appLocations[location]!;
+      return HomeSpotData(
+        location: data,
+        measurement: _liveWindSummary[location.name],
+        settled: _measurementsSettled,
+        armed: _isMonitoringArmed[index],
+        reloading: _reloading.contains(location.name),
+        forecast: _forecastSummary[location.name],
+        history: _history[location.name] ?? const [],
+        onArmed: (value) => _toggleMonitoring(index, value, data),
+        onOpen: () => _openLocation(location),
+        onReload: () => _reloadLocation(location),
+      );
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    debugPrint("MainScreen build index: $_currentIndex");
-    return Scaffold(
-      backgroundColor: AppColors.backgroundDark,
-      body: SafeArea(
-        bottom: false,
-        child: IndexedStack(
-          index: _currentIndex,
-          children: [
-            _buildHomeTab(),
-            _buildLocationsTab(),
-            _buildActivityTab(),
-            _buildSettingsTab(),
-          ],
-        ),
-      ),
-      bottomNavigationBar: _buildBottomNav(),
-    );
-  }
-
-  Widget _buildHomeTab() {
     final now = DateTime.now();
-    final dateStr = DateFormat('EEE, d. MMM', 'de_DE').format(now).toUpperCase();
-    final timeStr = DateFormat('HH:mm').format(now);
-    final greeting = now.hour < 12 ? "Guten Morgen" : (now.hour < 18 ? "Guten Tag" : "Guten Abend");
-
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(24, 40, 24, 120),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return MiraScaffold(
+      index: _currentIndex,
+      onChanged: (index) => setState(() => _currentIndex = index),
+      body: IndexedStack(
+        index: _currentIndex,
         children: [
-          Text(
-            "$dateStr • $timeStr",
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textMuted,
-              letterSpacing: 1.2,
-            ),
+          HomeDashboard(now: now, spots: _spots(now)),
+          PlacesDashboard(armed: _isMonitoringArmed, onOpen: _openLocation),
+          ActivityDashboard(
+            loading: _activityLoading,
+            alarms: alarmsFromHistory(historyByLocation: _history, now: now),
+            monitoredCaption: monitoredCaption(),
+            onSendTest: () => _sendTest('KOCHELSEE', 6, 15),
           ),
-          const SizedBox(height: 12),
-          Text(
-            "$greeting, Dominik.",
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 32,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-              letterSpacing: -1,
-            ),
-          ),
-          const SizedBox(height: 48),
-          ...WindLocation.values.asMap().entries.map((entry) {
-            final index = entry.key;
-            final loc = entry.value;
-            final data = appLocations[loc]!;
-            final measurement = _liveWindSummary[loc.name];
-            final isFresh = measurement != null && measurement.isCurrentlyFresh;
-            final wind = isFresh ? measurement.baseWind : null;
-            final status = isFresh ? "Frische Messung" : "Keine frische Messung";
-            
-            return LocationOverviewCard(
-              location: data,
-              currentWind: wind,
-              status: status,
-              isArmed: _isMonitoringArmed[index],
-              onArmedChanged: (val) => _toggleMonitoring(index, val, data),
-              forecast: _forecastSummary[loc.name],
-              onTap: () => Navigator.push(
-                context, 
-                MaterialPageRoute(builder: (_) => LocationScreen(location: loc))
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLocationsTab() {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "Alle Orte",
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 32,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-              letterSpacing: -1,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Expanded(
-            child: ListView.builder(
-              physics: const BouncingScrollPhysics(),
-              itemCount: WindLocation.values.length,
-              itemBuilder: (context, index) {
-                final loc = WindLocation.values[index];
-                final data = appLocations[loc]!;
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.backgroundCard,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.subtleBorder),
-                  ),
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: data.accentColor.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: FaIcon(data.icon, color: data.accentColor, size: 20),
-                    ),
-                    title: Text(
-                      data.name,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    subtitle: Text(
-                      "Überwachung: ${data.activeWindow}",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                    trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => LocationScreen(location: loc)),
-                    ),
-                  ),
-                );
-              },
-            ),
+          SetupDashboard(
+            status: _alarmStatus,
+            now: now,
+            lastTestAt: _lastTestAt,
+            onTestKochelsee: () => _sendTest('KOCHELSEE', 6, 15),
+            onTestGardasee: () => _sendTest('GARDASEE', 8, 45),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildActivityTab() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.history_rounded, size: 64, color: AppColors.textMuted.withValues(alpha: 0.5)),
-          const SizedBox(height: 16),
-          Text(
-            "Verlauf wird geladen...",
-            style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingsTab() {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "Setup & Test",
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 32,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-              letterSpacing: -1,
-            ),
-          ),
-          const SizedBox(height: 48),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: AppColors.backgroundCard,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppColors.subtleBorder),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.accentTeal.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.notifications_active_rounded, color: AppColors.accentTeal, size: 24),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Kritischer Alarm",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "Testet die Benachrichtigungen auf deinem iPhone, die auch im Stummmodus klingeln.",
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 12,
-                              color: AppColors.textMuted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accentTeal.withValues(alpha: 0.15),
-                      foregroundColor: AppColors.accentTeal,
-                      shadowColor: Colors.transparent,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: const BorderSide(color: AppColors.accentTeal, width: 1.5),
-                      ),
-                    ),
-                    onPressed: () async {
-                      await triggerAlarmLogic(
-                        hour: 6,
-                        minute: 15,
-                        locationName: "KOCHELSEE",
-                      );
-                    },
-                    child: Text(
-                      "Kochelsee-Alarm auslösen",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accentMint.withValues(alpha: 0.15),
-                      foregroundColor: AppColors.accentMint,
-                      shadowColor: Colors.transparent,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: const BorderSide(color: AppColors.accentMint, width: 1.5),
-                      ),
-                    ),
-                    onPressed: () async {
-                      await triggerAlarmLogic(
-                        hour: 8,
-                        minute: 45,
-                        locationName: "GARDASEE",
-                      );
-                    },
-                    child: Text(
-                      "Gardasee-Alarm auslösen",
-                      style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomNav() {
-    return Container(
-      padding: const EdgeInsets.only(bottom: 24, left: 16, right: 16, top: 8),
-      decoration: BoxDecoration(
-        color: AppColors.backgroundDark.withValues(alpha: 0.9),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: _onTabTapped,
-          backgroundColor: AppColors.glassCard.withValues(alpha: 0.8),
-          elevation: 0,
-          selectedItemColor: AppColors.accentTeal,
-          unselectedItemColor: AppColors.textMuted,
-          showSelectedLabels: true,
-          showUnselectedLabels: true,
-          type: BottomNavigationBarType.fixed,
-          selectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 10),
-          unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 10),
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: "START"),
-            BottomNavigationBarItem(icon: Icon(Icons.location_on_rounded), label: "ORTE"),
-            BottomNavigationBarItem(icon: Icon(Icons.insights_rounded), label: "VERLAUF"),
-            BottomNavigationBarItem(icon: Icon(Icons.settings_rounded), label: "SETUP"),
-          ],
-        ),
       ),
     );
   }
