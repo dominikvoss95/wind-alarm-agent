@@ -1,0 +1,50 @@
+{
+  "kochelsee_trimini_640.jpg": {
+    "location": "kochelsee",
+    "webcam": "Trimini",
+    "timezone": "Europe/Berlin",
+    "base_wind_knots": 1.08,
+    "gust_knots": 3.24,
+    "temperature_c": 7.6,
+    "local_time": "2026-10-31T19:00:00",
+    "observed_at_utc": "2026-10-31T18:00:00+00:00",
+    "overlay_text": "SA, 19:00\n31.10.2026\n7.6°C\n1.08 kts\nBöe 3.24 kts",
+    "note": "Captured 2026-10-31 from current/640.jpg. The clock says 19:00 local. The knots match the 18:59 station sample (wsavg 1.08, wsmax 3.24); the 19:00 sample was already 0 / 1.62."
+  },
+  "gardasee_malcesinenord_640.jpg": {
+    "location": "gardasee",
+    "webcam": "Malcesine Nord",
+    "timezone": "Europe/Rome",
+    "base_wind_knots": 0.16,
+    "gust_knots": 1.62,
+    "temperature_c": 15.0,
+    "local_time": "2026-10-31T19:00:00",
+    "observed_at_utc": "2026-10-31T18:00:00+00:00",
+    "overlay_text": "SA, 19:00\n31.10.2026\n15°C\n0.16 kts\nBöe 1.62 kts",
+    "note": "Matches the 19:00 station sample exactly (wsavg 0.16, wsmax 1.62, temp 15.0)."
+  },
+  "gardasee_malcesine_640.jpg": {
+    "location": "gardasee",
+    "webcam": "Malcesine",
+    "timezone": "Europe/Rome",
+    "base_wind_knots": 2.17,
+    "gust_knots": 5.21,
+    "temperature_c": 15.0,
+    "local_time": "2026-10-31T19:00:00",
+    "observed_at_utc": "2026-10-31T18:00:00+00:00",
+    "overlay_text": "SA, 19:00\n31.10.2026\n15°C\n2.17 kts\nBöe 5.21 kts",
+    "note": "Frame clock is 19:00. The station at this cam reports every 10 minutes; 2.17 / 5.21 is the 18:55 sample."
+  },
+  "gardasee_campione_640.jpg": {
+    "location": "gardasee",
+    "webcam": "Campione",
+    "timezone": "Europe/Rome",
+    "base_wind_knots": 4.0,
+    "gust_knots": 7.56,
+    "temperature_c": 16.0,
+    "local_time": "2026-10-31T19:00:00",
+    "observed_at_utc": "2026-10-31T18:00:00+00:00",
+    "overlay_text": "SA, 19:00\n31.10.2026\n16°C\n4 kts\nBöe 7.56 kts",
+    "note": "Overlay shows 4 kts and Böe 7.56 kts, which is the 18:59 sample. The 19:00 sample was 4.32 / 5.94. 16°C is the temperature and must not be read as wind."
+  }
+}
