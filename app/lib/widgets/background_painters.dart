@@ -16,8 +16,8 @@ class GlowingOrbPainter extends CustomPainter {
     final paint = Paint()
       ..shader = RadialGradient(
         colors: [
-          color.withOpacity(0.6),
-          color.withOpacity(0.0),
+          color.withValues(alpha: 0.6),
+          color.withValues(alpha: 0.0),
         ],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
 

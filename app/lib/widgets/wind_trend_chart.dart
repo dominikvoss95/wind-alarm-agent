@@ -15,6 +15,10 @@ class WindTrendChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (data.isEmpty) {
+      return SizedBox(height: height);
+    }
+
     return SizedBox(
       height: height,
       child: Row(
@@ -38,8 +42,8 @@ class WindTrendChart extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: isHighlighted
-                      ? [barColor, barColor.withOpacity(0.5)]
-                      : [AppColors.textMuted.withOpacity(0.3), AppColors.textMuted.withOpacity(0.1)],
+                      ? [barColor, barColor.withValues(alpha: 0.5)]
+                      : [AppColors.textMuted.withValues(alpha: 0.3), AppColors.textMuted.withValues(alpha: 0.1)],
                 ),
               ),
             ),

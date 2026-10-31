@@ -2,10 +2,8 @@
 Scraper module using Playwright to capture screenshots of forecast sources.
 """
 import logging
-import os
 import re
 import time
-from pathlib import Path
 from typing import Dict
 from playwright.sync_api import sync_playwright
 
@@ -55,6 +53,7 @@ def scrape_forecast_sources(location_id: str) -> Dict[str, str]:
                 screenshot_path = str(forecast_dir / f"{source_id}.png")
                 logger.info("Scraping forecast source: %s (%s)", name, url)
                 
+                page = None
                 try:
                     page = context.new_page()
                     
@@ -111,7 +110,11 @@ def scrape_forecast_sources(location_id: str) -> Dict[str, str]:
                 except Exception as exc:
                     logger.error("Failed to scrape forecast source %s: %s", name, exc)
                 finally:
-                    page.close()
+                    if page is not None:
+                        try:
+                            page.close()
+                        except Exception:  # pylint: disable=broad-exception-caught
+                            logger.debug("Failed to close forecast page", exc_info=True)
                     
             browser.close()
             

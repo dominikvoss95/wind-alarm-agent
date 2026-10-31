@@ -23,9 +23,10 @@ from decimal import Decimal
 
 def save_measurement(state: dict) -> bool:
     table = get_table()
+    observed_at = state.get("observed_at") or datetime.now(timezone.utc).isoformat()
     item = {
         "location_id": state.get("location_id", "default"),
-        "observed_at": state.get("observed_at", datetime.now(timezone.utc).isoformat()),
+        "observed_at": observed_at,
         "base_wind_knots": Decimal(str(state.get("base_wind_knots", 0.0))),
         "gust_knots": Decimal(str(state.get("gust_knots", 0.0))),
         "threshold_exceeded": state.get("threshold_exceeded", False),
@@ -72,7 +73,8 @@ def update_s3_measurements(location_id: str, aggregated_data: dict) -> None:
     except Exception as exc:
         logging.info("No existing measurements.json found in S3 or failed to read: %s. Creating new.", exc)
 
-    current_data[location_id] = aggregated_data
+    from wind_alarm.store import to_public_measurement
+    current_data[location_id] = to_public_measurement(aggregated_data)
 
     try:
         s3.put_object(

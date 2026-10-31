@@ -27,11 +27,7 @@ RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
 # Copy application source
 COPY src/ ./src/
 COPY app.py ./
-COPY pyproject.toml ./
 COPY README.md ./
-COPY specs.md ./
-COPY config.toml .env.example ./
-COPY debugging.md ./
 
 # Permissions
 RUN chown -R appuser:appuser /app
@@ -40,6 +36,7 @@ USER appuser
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app/src
 ENV LOG_LEVEL=INFO
 
 # Expose API port

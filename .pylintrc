@@ -1,0 +1,41 @@
+[MAIN]
+# OpenCV exports members such as imread at runtime.
+generated-members=cv2.*
+
+[FORMAT]
+max-line-length=120
+
+[MESSAGES CONTROL]
+# The tree predates a strict pylint setup. Keep errors and useful warnings,
+# and skip style checks that would require a repo-wide rewrite.
+disable=
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    trailing-whitespace,
+    missing-final-newline,
+    wrong-import-order,
+    wrong-import-position,
+    import-outside-toplevel,
+    duplicate-code,
+    too-few-public-methods,
+    too-many-locals,
+    too-many-statements,
+    no-else-return,
+    broad-exception-caught,
+    invalid-name,
+    global-statement,
+    unused-import,
+    unused-variable,
+    unused-argument,
+    redefined-outer-name,
+    reimported,
+    bad-indentation,
+    fixme,
+    consider-using-f-string,
+    use-dict-literal,
+    line-too-long,
+    too-many-return-statements,
+    too-many-branches,
+    superfluous-parens,
+    multiple-statements

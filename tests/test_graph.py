@@ -26,3 +26,17 @@ def test_full_graph_execution_skipped_fetch():
     assert result.get("is_fresh") is False
     assert result.get("threshold_exceeded") is False
     assert result.get("notification_sent") is False
+
+
+def test_skip_notification_is_kept_in_graph_state():
+    """Aggregator sets this flag; LangGraph must not drop it."""
+    app = build_wind_alarm_graph()
+    initial_state = WindGraphState(
+        source_identifier="",
+        threshold_knots=10,
+        freshness_limit_minutes=60,
+        skip_notification=True,
+    )
+    result = app.invoke(initial_state)
+    assert result.get("skip_notification") is True
+    assert result.get("notification_sent") is False

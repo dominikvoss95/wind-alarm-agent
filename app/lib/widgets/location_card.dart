@@ -71,8 +71,8 @@ class LocationOverviewCard extends StatelessWidget {
                 Switch(
                   value: isArmed,
                   onChanged: onArmedChanged,
-                  activeColor: AppColors.accentCyan,
-                  activeTrackColor: AppColors.accentCyan.withOpacity(0.2),
+                  activeThumbColor: AppColors.accentCyan,
+                  activeTrackColor: AppColors.accentCyan.withValues(alpha: 0.2),
                   inactiveThumbColor: AppColors.textMuted,
                   inactiveTrackColor: AppColors.subtleBorder,
                 ),
@@ -147,7 +147,7 @@ class LocationOverviewCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.2),
+                color: Colors.black.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -165,7 +165,7 @@ class LocationOverviewCard extends StatelessWidget {
                           : "Warten auf das nächste Überwachungsfenster.",
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
-                        color: (hasData ? AppColors.accentCyan : AppColors.textMuted).withOpacity(0.8),
+                        color: (hasData ? AppColors.accentCyan : AppColors.textMuted).withValues(alpha: 0.8),
                         fontWeight: FontWeight.w500,
                       ),
                     ),

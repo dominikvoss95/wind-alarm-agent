@@ -204,8 +204,10 @@ def parse_primary_source(state: WindGraphState) -> WindGraphState:
             json_match = re.search(r"\{.*?\}", response_text, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group(0))
-                base_wind = float(data.get("wind", 0.0))
-                gust = float(data.get("gust", 0.0))
+                if data.get("wind") is None:
+                    raise ValueError(f"Wind speed missing from Azure OpenAI response: {response_text}")
+                base_wind = float(data["wind"])
+                gust = float(data["gust"]) if data.get("gust") is not None else 0.0
             else:
                 raise ValueError(f"Could not parse JSON from Azure OpenAI response: {response_text}")
 
@@ -270,8 +272,10 @@ def parse_primary_source(state: WindGraphState) -> WindGraphState:
             json_match = re.search(r"\{.*?\}", response_text, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group(0))
-                base_wind = float(data.get("wind", 0.0))
-                gust = float(data.get("gust", 0.0))
+                if data.get("wind") is None:
+                    raise ValueError(f"Wind speed missing from Bedrock response: {response_text}")
+                base_wind = float(data["wind"])
+                gust = float(data["gust"]) if data.get("gust") is not None else 0.0
             else:
                 raise ValueError(f"Could not parse JSON from Bedrock response: {response_text}")
 
@@ -306,7 +310,14 @@ def parse_primary_source(state: WindGraphState) -> WindGraphState:
             wind_match = re.search(r"Wind:?\s*(\d+)\s*kts?", full_text, re.IGNORECASE)
             gust_match = re.search(r"B[öo]en:?\s*(\d+)\s*kts?", full_text, re.IGNORECASE)
 
-            base_wind = float(wind_match.group(1)) if wind_match else 0.0
+            if not wind_match:
+                return {
+                    "parse_status": "failed",
+                    "observed_at": observed_at,
+                    "error_message": "Wind speed not found in OCR text",
+                }
+
+            base_wind = float(wind_match.group(1))
             gust = float(gust_match.group(1)) if gust_match else 0.0
 
             return {
@@ -378,7 +389,7 @@ def send_notification(state: WindGraphState) -> WindGraphState:
     if state.get("skip_notification") or not state.get("threshold_exceeded"):
         return {"notification_sent": False}
 
-    topic = state.get("target_fcm_topic", "wind_alarms")
+    topic = state.get("target_fcm_topic") or config.FCM_TOPIC
     base_wind = state.get("base_wind_knots", 0.0)
     location_id = state.get("location_id", "default")
 

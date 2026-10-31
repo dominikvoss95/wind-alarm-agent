@@ -14,3 +14,6 @@ openai
 azure-cosmos
 azure-storage-blob
 azure-identity
+python-dotenv~=1.0
+fastapi>=0.110
+uvicorn>=0.30

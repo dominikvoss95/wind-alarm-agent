@@ -3,9 +3,14 @@ from wind_alarm.config import config
 from wind_alarm.state import WindGraphState
 
 
-def get_orchestrator():
-    # Check env variable first, default to bedrock if USE_AWS is true, else langgraph
-    mode = os.environ.get("WIND_ALARM_ORCHESTRATOR")
+def get_orchestrator(mode: str | None = None):
+    """Resolve the orchestrator.
+
+    An explicit mode (the CLI flag) wins, then WIND_ALARM_ORCHESTRATOR,
+    then Bedrock when USE_AWS is set, otherwise LangGraph.
+    """
+    if not mode:
+        mode = os.environ.get("WIND_ALARM_ORCHESTRATOR")
     if not mode:
         mode = "bedrock" if config.USE_AWS else "langgraph"
     

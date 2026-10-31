@@ -1,10 +1,13 @@
 """
 Tests for multi-location support in the Wind Alarm Agent.
 """
+import sys
+from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 from wind_alarm.config import config
 from wind_alarm.nodes import send_notification
 from wind_alarm.state import WindGraphState
+from wind_alarm.aggregator import run_and_aggregate_measurements
 from app import main
 
 def test_config_locations_exist():
@@ -42,7 +45,6 @@ def test_app_gardasee_invokes_three_urls(mock_sleep, mock_get_orch):
     mock_orch.get_name.return_value = "LangGraph"
     mock_get_orch.return_value = mock_orch
 
-    import sys
     with patch.object(sys, 'argv', ['app.py', '--location', 'gardasee']):
         try:
             main()
@@ -54,3 +56,48 @@ def test_app_gardasee_invokes_three_urls(mock_sleep, mock_get_orch):
         state = call[0][0]
         assert state["location_id"] == "gardasee"
         assert state["target_fcm_topic"] == "wind_alarms_gardasee"
+        assert state["skip_notification"] is True
+
+
+@patch("wind_alarm.aws.bedrock_orchestrator.BedrockOrchestrator")
+@patch("wind_alarm.aggregator.run_and_aggregate_measurements", return_value={"threshold_exceeded": False, "webcams": {}})
+def test_cli_orchestrator_flag_is_honored(mock_run, mock_bedrock_cls):
+    """--orchestrator must select the backend instead of being ignored."""
+    mock_bedrock_cls.return_value.get_name.return_value = "Bedrock Agents"
+    with patch.object(sys, "argv", ["app.py", "--location", "kochelsee", "--orchestrator", "bedrock"]):
+        main()
+    mock_bedrock_cls.assert_called_once()
+    assert mock_run.call_args.kwargs["orchestrator"] is mock_bedrock_cls.return_value
+
+
+@patch("wind_alarm.nodes.messaging.send", return_value="projects/test/messages/1")
+@patch("wind_alarm.config.config.initialize_firebase")
+@patch("wind_alarm.graph.parse_primary_source")
+@patch("wind_alarm.graph.fetch_primary_source")
+def test_aggregator_sends_one_notification(mock_fetch, mock_parse, _mock_init, mock_send):
+    """A fresh reading above the threshold sends the consolidated alert only."""
+    observed = datetime.now(timezone.utc).isoformat()
+    mock_fetch.return_value = {
+        "fetch_status": "success",
+        "raw_payload": "/tmp/shot.png",
+        "fetched_at": observed,
+        "error_message": "",
+    }
+    mock_parse.return_value = {
+        "parse_status": "success",
+        "observed_at": observed,
+        "base_wind_knots": 20.0,
+        "gust_knots": 24.0,
+        "error_message": "",
+    }
+    from wind_alarm.local.langgraph_orchestrator import LangGraphOrchestrator
+
+    result = run_and_aggregate_measurements(
+        location_id="kochelsee",
+        threshold=10.0,
+        freshness=60,
+        orchestrator=LangGraphOrchestrator(),
+    )
+    assert result["threshold_exceeded"] is True
+    assert result["notification_sent"] is True
+    assert mock_send.call_count == 1

@@ -16,7 +16,9 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      FCM_TOPIC: "wind_alarms" # Consistent with app.py and Flutter app
+      # Fallback when a run has no per-location topic. Kochelsee alarms use
+      # config.LOCATIONS (wind_alarms_kochelsee), which the Flutter app subscribes to.
+      FCM_TOPIC: "wind_alarms_kochelsee"
 
     steps:
       - name: Checkout repository
@@ -35,13 +37,15 @@ jobs:
 
       - name: Install Playwright Browsers
         run: |
-          playwright install chromium
+          playwright install --with-deps chromium
 
       - name: Create Firebase Service Account Key
-        # This takes the content of the GH Secret and writes it to the file path defined in config.py
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: |
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}" > serviceAccountKey.json
-        if: "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON != '' }}"
+          if [ -n "$FIREBASE_SERVICE_ACCOUNT_JSON" ]; then
+            printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > serviceAccountKey.json
+          fi
 
       - name: Run Wind Alarm Agent
         run: |

@@ -32,18 +32,19 @@ class WindMeasurement {
   });
 
   factory WindMeasurement.fromJson(String location, Map<String, dynamic> json) {
+    final updatedAt = (json['updated_at'] ?? json['fetched_at'] ?? json['observed_at'] ?? '').toString();
     return WindMeasurement(
       location: location,
-      baseWind: (json['base_wind'] ?? (json['base_wind_knots'] ?? 0.0)).toDouble(),
-      gust: (json['gust'] ?? (json['gust_knots'] ?? 0.0)).toDouble(),
-      observedAt: json['observed_at'],
-      fetchedAt: json['fetched_at'],
-      fetchStatus: json['fetch_status'] ?? 'unknown',
+      baseWind: _asDouble(json['base_wind'] ?? json['base_wind_knots']),
+      gust: _asDouble(json['gust'] ?? json['gust_knots']),
+      observedAt: json['observed_at']?.toString(),
+      fetchedAt: json['fetched_at']?.toString(),
+      fetchStatus: (json['fetch_status'] ?? json['parse_status'] ?? 'unknown').toString(),
       isFresh: json['is_fresh'] ?? false,
       thresholdExceeded: json['threshold_exceeded'] ?? false,
-      errorMessage: json['error_message'] ?? '',
-      updatedAt: json['updated_at'] ?? '',
-      webcams: json['webcams'] as Map<String, dynamic>?,
+      errorMessage: json['error_message']?.toString() ?? '',
+      updatedAt: updatedAt,
+      webcams: json['webcams'] is Map ? Map<String, dynamic>.from(json['webcams'] as Map) : null,
     );
   }
 
@@ -164,7 +165,7 @@ class WindApiService {
 
         if (response.statusCode == 200) {
           final List<dynamic> jsonList = jsonDecode(response.body);
-          return jsonList.map((item) => WindHistoryItem.fromJson(item)).toList();
+          return _parseHistory(jsonList);
         }
         return [];
       } else {
@@ -175,13 +176,28 @@ class WindApiService {
 
         if (response.statusCode == 200) {
           final List<dynamic> jsonList = jsonDecode(response.body);
-          return jsonList.map((item) => WindHistoryItem.fromJson(item)).toList();
+          return _parseHistory(jsonList);
         }
         return [];
       }
     } catch (e) {
       return [];
     }
+  }
+
+  static List<WindHistoryItem> _parseHistory(List<dynamic> jsonList) {
+    final items = <WindHistoryItem>[];
+    for (final item in jsonList) {
+      if (item is! Map) {
+        continue;
+      }
+      try {
+        items.add(WindHistoryItem.fromJson(Map<String, dynamic>.from(item)));
+      } catch (_) {
+        continue;
+      }
+    }
+    return items;
   }
 
   static Future<WindForecast?> getForecast(String location) async {
@@ -256,11 +272,21 @@ class WindHistoryItem {
 
   factory WindHistoryItem.fromJson(Map<String, dynamic> json) {
     return WindHistoryItem(
-      observedAt: DateTime.parse(json['observed_at']).toLocal(),
-      baseWind: (json['base_wind'] ?? 0.0).toDouble(),
-      gust: (json['gust'] ?? 0.0).toDouble(),
+      observedAt: DateTime.parse(json['observed_at'].toString()).toLocal(),
+      baseWind: _asDouble(json['base_wind'] ?? json['base_wind_knots']),
+      gust: _asDouble(json['gust'] ?? json['gust_knots']),
     );
   }
+}
+
+double _asDouble(dynamic value) {
+  if (value is num) {
+    return value.toDouble();
+  }
+  if (value is String) {
+    return double.tryParse(value) ?? 0.0;
+  }
+  return 0.0;
 }
 
 class WindForecast {

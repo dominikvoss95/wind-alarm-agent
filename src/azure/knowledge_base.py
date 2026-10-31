@@ -157,7 +157,8 @@ def update_blob_measurements(location_id: str, aggregated_data: dict) -> None:
     except Exception as exc:
         logger.info("No existing measurements.json found or failed to read: %s. Creating new.", exc)
         
-    current_data[location_id] = aggregated_data
+    from wind_alarm.store import to_public_measurement
+    current_data[location_id] = to_public_measurement(aggregated_data)
     _upload_to_blob(key, current_data)
 
 
@@ -194,4 +195,4 @@ def update_blob_history(location_id: str) -> None:
         ]
         _upload_to_blob(key, history_list)
     except Exception as exc:
-        logger.error("Failed to update S3 history file %s: %s", key, exc)
+        logger.error("Failed to update blob history file %s: %s", key, exc)

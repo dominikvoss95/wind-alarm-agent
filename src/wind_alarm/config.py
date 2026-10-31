@@ -86,22 +86,31 @@ class Config:
 
     def initialize_firebase(self):
         """Lazily initialize Firebase Admin SDK."""
+        import json
+        import logging
         import firebase_admin
         from firebase_admin import credentials
         try:
             firebase_admin.get_app()
         except ValueError:
-            import os
-            import logging
-            logging.info("Initializing Firebase Admin SDK. Credentials path: %s", self.FIREBASE_CREDENTIALS_PATH)
-            if os.path.exists(self.FIREBASE_CREDENTIALS_PATH):
-                logging.info("Credentials file found. Initializing with certificate.")
+            raw_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+            if raw_json:
+                logging.info("Initializing Firebase Admin SDK from FIREBASE_SERVICE_ACCOUNT_JSON")
+                try:
+                    cred = credentials.Certificate(json.loads(raw_json))
+                except (json.JSONDecodeError, ValueError) as exc:
+                    logging.error("FIREBASE_SERVICE_ACCOUNT_JSON is not valid service account JSON: %s", exc)
+                    raise
+                firebase_admin.initialize_app(cred)
+            elif os.path.exists(self.FIREBASE_CREDENTIALS_PATH):
+                logging.info("Initializing Firebase Admin SDK from %s", self.FIREBASE_CREDENTIALS_PATH)
                 cred = credentials.Certificate(self.FIREBASE_CREDENTIALS_PATH)
                 firebase_admin.initialize_app(cred)
             else:
-                dir_path = os.path.dirname(self.FIREBASE_CREDENTIALS_PATH)
-                contents = os.listdir(dir_path) if os.path.exists(dir_path) else []
-                logging.warning("Credentials file not found at %s. Directory contents: %s", self.FIREBASE_CREDENTIALS_PATH, contents)
+                logging.warning(
+                    "Firebase credentials not found at %s and FIREBASE_SERVICE_ACCOUNT_JSON is unset",
+                    self.FIREBASE_CREDENTIALS_PATH,
+                )
                 firebase_admin.initialize_app()
 
 

@@ -10,27 +10,41 @@ from wind_alarm.config import config
 
 def main():
     parser = argparse.ArgumentParser(description="Run the Wind Alarm Agent.")
+    parser.add_argument("--api", action="store_true", help="Serve the HTTP API instead of running a check")
+    parser.add_argument("--host", type=str, default=os.environ.get("HOST", "0.0.0.0"))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
     parser.add_argument("--location", type=str, default="kochelsee", choices=["kochelsee", "gardasee"])
     parser.add_argument("--threshold", type=float, default=12.0)
     parser.add_argument("--freshness", type=int, default=60)
-    parser.add_argument("--orchestrator", type=str, default=os.environ.get("WIND_ALARM_ORCHESTRATOR", "langgraph"))
+    parser.add_argument(
+        "--orchestrator",
+        type=str,
+        default=None,
+        choices=["langgraph", "bedrock"],
+        help="Override WIND_ALARM_ORCHESTRATOR / USE_AWS selection",
+    )
     parser.add_argument("--loop", action="store_true")
     parser.add_argument("--interval", type=int, default=30)
 
     args = parser.parse_args()
+
+    if args.api:
+        import uvicorn
+        uvicorn.run("wind_alarm.api:app", host=args.host, port=args.port)
+        return
+
     location_cfg = config.LOCATIONS.get(args.location)
     if not location_cfg:
         print(f"Error: Unknown location '{args.location}'")
         return
 
     from wind_alarm.orchestrator import get_orchestrator
-    from wind_alarm.state import WindGraphState
 
     try:
-        orchestrator = get_orchestrator()
+        orchestrator = get_orchestrator(args.orchestrator)
         print(f"Using orchestrator: {orchestrator.get_name()}")
-    except EnvironmentError as e:
-        print(f"ERROR: {e}")
+    except EnvironmentError as exc:
+        print(f"ERROR: {exc}")
         return
 
     from wind_alarm.aggregator import run_and_aggregate_measurements

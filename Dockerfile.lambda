@@ -41,7 +41,6 @@ RUN playwright install chromium
 COPY src/wind_alarm/ ${LAMBDA_TASK_ROOT}/wind_alarm/
 COPY src/aws/ ${LAMBDA_TASK_ROOT}/aws/
 COPY app.py ${LAMBDA_TASK_ROOT}/
-COPY serviceAccountKey.json* ${LAMBDA_TASK_ROOT}/
 
 ENV PYTHONPATH=${LAMBDA_TASK_ROOT}
 
