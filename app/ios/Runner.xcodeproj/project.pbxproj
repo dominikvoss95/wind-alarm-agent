@@ -57,6 +57,8 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A11A11A11CF9000F00ENT001 /* Debug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Debug.entitlements; sourceTree = "<group>"; };
+		A11A11A21CF9000F00ENT002 /* Release.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Release.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -120,6 +122,8 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 				F3123457294A63AB00263BE5 /* alarm_sound.mp3 */,
+				A11A11A11CF9000F00ENT001 /* Debug.entitlements */,
+				A11A11A21CF9000F00ENT002 /* Release.entitlements */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -373,6 +377,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "de.dominikvoss.wind-alarm";
+				CODE_SIGN_ENTITLEMENTS = Runner/Release.entitlements;
 				DEVELOPMENT_TEAM = REPLACE_WITH_YOUR_TEAM_ID;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -553,6 +558,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "de.dominikvoss.wind-alarm";
+				CODE_SIGN_ENTITLEMENTS = Runner/Debug.entitlements;
 				DEVELOPMENT_TEAM = REPLACE_WITH_YOUR_TEAM_ID;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
@@ -576,6 +582,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "de.dominikvoss.wind-alarm";
+				CODE_SIGN_ENTITLEMENTS = Runner/Release.entitlements;
 				DEVELOPMENT_TEAM = REPLACE_WITH_YOUR_TEAM_ID;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";

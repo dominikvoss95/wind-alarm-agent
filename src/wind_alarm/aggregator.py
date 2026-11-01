@@ -3,9 +3,10 @@ Aggregated checking and notification module for multiple webcams per location.
 """
 import logging
 from typing import Dict, Any, List
-from firebase_admin import messaging
-
+from wind_alarm.alarm_ledger import AlarmLedger, berlin_today, notifications_enabled
 from wind_alarm.config import config
+from wind_alarm.notify import build_alarm_message
+from wind_alarm.run_report import measurement_exit_code, station_status
 from wind_alarm.state import WindGraphState
 from wind_alarm import store
 
@@ -29,36 +30,44 @@ def clean_cam_id(url: str) -> str:
 
 def _extract_cam_data(res: Any) -> Dict[str, Any]:
     """Helper to extract webcam details safely, handling mocks."""
+    status = station_status(res)
     if hasattr(res, "get"):
+        wind = res.get("base_wind_knots")
+        gust = res.get("gust_knots")
         return {
-            "base_wind": res.get("base_wind_knots", 0.0),
-            "gust": res.get("gust_knots", 0.0),
-            "is_fresh": res.get("is_fresh", False),
+            "base_wind": wind if isinstance(wind, (int, float)) else None,
+            "gust": gust if isinstance(gust, (int, float)) else None,
+            "is_fresh": bool(res.get("is_fresh")) if status == "measured" else False,
             "observed_at": res.get("observed_at"),
+            "status": status,
+            "reading_source": res.get("reading_source") or "",
+            "error_message": res.get("error_message") or "",
         }
     return {
-        "base_wind": 0.0,
-        "gust": 0.0,
+        "base_wind": None,
+        "gust": None,
         "is_fresh": False,
         "observed_at": None,
+        "status": status,
+        "reading_source": "",
+        "error_message": "",
     }
 
 
-def _get_max_wind(results: Dict[str, Any]) -> float:
-    """Extract max wind speed safely, handling potential MagicMocks in testing."""
+def _trigger_wind(location_id: str, results: Dict[str, Any]) -> float:
+    """Highest base wind among the spots that actually raised the alarm."""
     wind_values = []
-    for res in results.values():
-        if hasattr(res, "get"):
-            val = res.get("base_wind_knots", 0.0)
-            if isinstance(val, (int, float)):
-                wind_values.append(val)
-            else:
-                try:
-                    wind_values.append(float(val))
-                except (ValueError, TypeError):
-                    wind_values.append(0.0)
-        else:
-            wind_values.append(0.0)
+    for spot in TRIGGER_SPOTS.get(location_id, []):
+        res = results.get(spot)
+        if not hasattr(res, "get"):
+            continue
+        if not (res.get("threshold_exceeded") and res.get("is_fresh")):
+            continue
+        val = res.get("base_wind_knots", 0.0)
+        try:
+            wind_values.append(float(val))
+        except (TypeError, ValueError):
+            continue
     return max(wind_values) if wind_values else 0.0
 
 
@@ -82,6 +91,8 @@ def _evaluate_trigger(location_id: str, results: Dict[str, Any]) -> bool:
     for spot in trigger_spots:
         if spot in results:
             res = results[spot]
+            if station_status(res) != "measured":
+                continue
             if res.get("threshold_exceeded") and res.get("is_fresh"):
                 return True
     return False
@@ -93,32 +104,37 @@ def _send_notification_if_triggered(
     results: Dict[str, Any],
     should_trigger: bool
 ) -> bool:
-    """Send FCM notification if should_trigger is True."""
+    """Send FCM notification if should_trigger is True. At most one push per Berlin day."""
     if not should_trigger:
+        return False
+    if not notifications_enabled():
+        logging.info("notifications disabled for %s (WIND_ALARM_SEND)", location_id)
+        return False
+    ledger = AlarmLedger()
+    day = berlin_today()
+    if ledger.already_sent(location_id, day):
+        logging.info("suppressing duplicate alarm for %s on %s", location_id, day)
         return False
 
     trigger_spots = TRIGGER_SPOTS.get(location_id, [])
     body = _build_notification_body(trigger_spots, results)
     topic = location_cfg["fcm_topic"]
-    max_wind = _get_max_wind(results)
+    max_wind = _trigger_wind(location_id, results)
 
-    message = messaging.Message(
-        notification=messaging.Notification(
-            title=f"💨 Wind-Alarm: {location_cfg['name']}!",
-            body=body,
-        ),
-        data={
-            "action": "schedule_alarm",
-            "location": location_id,
-            "wind": str(max_wind),
-        },
+    message = build_alarm_message(
         topic=topic,
+        title=f"💨 Wind-Alarm: {location_cfg['name']}!",
+        body=body,
+        location_id=location_id,
+        wind_knots=max_wind,
     )
 
     try:
+        from firebase_admin import messaging
         config.initialize_firebase()
         response = messaging.send(message)
         logging.info("Successfully sent consolidated notification: %s", response)
+        ledger.mark_sent(location_id, day)
         return True
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logging.error("Failed to send consolidated notification: %s", exc)
@@ -219,6 +235,9 @@ def _log_summary(
         )
         summary_parts.append(f"{name}: {wind} kts ({status})")
 
+    for cam_id, res in results.items():
+        if hasattr(res, "get") and res.get("error_message"):
+            logging.error("station %s error: %s", cam_id, res.get("error_message"))
     logging.info(
         "Aggregation Results for %s: should_trigger=%s. Details: %s",
         location_id, should_trigger, ", ".join(summary_parts)
@@ -267,12 +286,17 @@ def run_and_aggregate_measurements(
     )
 
     best_res = _find_best_res(results)
+    trigger_spots = TRIGGER_SPOTS.get(location_id) or list(results)
+    statuses = [
+        station_status(results[spot]) for spot in trigger_spots if spot in results
+    ]
     aggregated_data = _build_aggregated_dict(
         best_res=best_res,
         should_trigger=should_trigger,
         notification_sent=notification_sent,
         results=results,
     )
+    aggregated_data["run_exit_code"] = measurement_exit_code(statuses)
 
     store.set_measurement(location_id, aggregated_data)
 

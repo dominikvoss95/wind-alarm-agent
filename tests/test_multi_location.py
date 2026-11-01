@@ -2,6 +2,8 @@
 Tests for multi-location support in the Wind Alarm Agent.
 """
 import sys
+
+import pytest
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 from wind_alarm.config import config
@@ -65,7 +67,9 @@ def test_cli_orchestrator_flag_is_honored(mock_run, mock_bedrock_cls):
     """--orchestrator must select the backend instead of being ignored."""
     mock_bedrock_cls.return_value.get_name.return_value = "Bedrock Agents"
     with patch.object(sys, "argv", ["app.py", "--location", "kochelsee", "--orchestrator", "bedrock"]):
-        main()
+        with pytest.raises(SystemExit) as caught:
+            main()
+    assert caught.value.code == 2
     mock_bedrock_cls.assert_called_once()
     assert mock_run.call_args.kwargs["orchestrator"] is mock_bedrock_cls.return_value
 

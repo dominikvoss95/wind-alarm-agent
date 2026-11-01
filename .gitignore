@@ -16,6 +16,8 @@ specs.md
 # Debug and data
 debug/
 data/
+actionlint
+.alarm-ledger/
 /tmp/
 
 # IDEs
@@ -29,6 +31,7 @@ data/
 !pyproject.toml
 !package.json
 !manifest.json
+!tests/fixtures/*.json
 
 # AWS and Cloud CLI
 .aws/

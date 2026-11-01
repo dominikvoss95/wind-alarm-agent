@@ -33,6 +33,31 @@ void main() {
     expect(readingIsFresh(fresh, now), fresh.isCurrentlyFresh);
     expect(readingIsFresh(stale, now), isFalse);
     expect(stale.isCurrentlyFresh, isFalse);
+
+    final observedStale = WindMeasurement(
+      location: 'kochelsee',
+      baseWind: 18,
+      gust: 22,
+      observedAt: now.subtract(const Duration(hours: 3)).toIso8601String(),
+      fetchStatus: 'success',
+      isFresh: true,
+      thresholdExceeded: false,
+      errorMessage: '',
+      updatedAt: now.toIso8601String(),
+    );
+    expect(readingIsFresh(observedStale, now), isFalse);
+    final agentStale = WindMeasurement(
+      location: 'kochelsee',
+      baseWind: 18,
+      gust: 22,
+      observedAt: now.subtract(const Duration(minutes: 5)).toIso8601String(),
+      fetchStatus: 'success',
+      isFresh: false,
+      thresholdExceeded: false,
+      errorMessage: '',
+      updatedAt: now.toIso8601String(),
+    );
+    expect(readingIsFresh(agentStale, now), isFalse);
   });
 
   test('next window and direction bearings stay on the existing abbreviations', () {

@@ -21,13 +21,11 @@ const Map<String, double> kDirectionBearings = {
 
 const List<String> kCompassSectors = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
-/// Same 60-minute rule as [WindMeasurement.isCurrentlyFresh], using the
-/// clock the screen is rendering with. Only `updatedAt` counts, as in the model.
+/// Same 60-minute rule as [WindMeasurement.isFreshAt]. Uses the measurement
+/// time when the payload has one, so a stale observation is not shown as live
+/// just because the agent stored it moments ago.
 bool readingIsFresh(WindMeasurement measurement, DateTime now) {
-  if (measurement.updatedAt.isEmpty) return false;
-  final updated = DateTime.tryParse(measurement.updatedAt)?.toLocal();
-  if (updated == null) return false;
-  return now.difference(updated).inMinutes < 60;
+  return measurement.isFreshAt(now);
 }
 
 DateTime? measurementTime(WindMeasurement measurement) {

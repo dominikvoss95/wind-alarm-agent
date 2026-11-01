@@ -58,13 +58,17 @@ class DefaultFirebaseOptions {
     storageBucket: 'wind-alarm-agent.firebasestorage.app',
   );
 
+  // Same Firebase project as GoogleService-Info.plist and the Android app
+  // (wind-alarm-agent, sender 361158488010). The previous iOS block pointed at
+  // wind-alarm-agent-eb65f with bundle com.example.app, so FCM could not
+  // deliver to de.dominikvoss.wind-alarm.
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAVFsr1G6JlKMJZKyLaJJEoMCAzYIiGGtM',
-    appId: '1:114214795536:ios:63e8ecb84eb3d16ba28d95',
-    messagingSenderId: '114214795536',
-    projectId: 'wind-alarm-agent-eb65f',
-    storageBucket: 'wind-alarm-agent-eb65f.firebasestorage.app',
-    iosBundleId: 'com.example.app',
+    apiKey: 'AIzaSyCHEHI1Z7bhLZg566mfd4xRlwrpxDZGWZA',
+    appId: '1:361158488010:ios:d8671f8e22af34eb702933',
+    messagingSenderId: '361158488010',
+    projectId: 'wind-alarm-agent',
+    storageBucket: 'wind-alarm-agent.firebasestorage.app',
+    iosBundleId: 'de.dominikvoss.wind-alarm',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(

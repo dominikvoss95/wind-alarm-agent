@@ -85,7 +85,7 @@ jobs:
           if [[ "${status}" -ne 0 ]]; then
             echo "::error::flutter build ios failed with exit ${status}"
             echo "::group::Matching error lines"
-            grep -nE 'error:|Error \(|Failed to build|Could not|couldn’t be opened|fatal error:' "${log}" | tail -n 100 || true
+            grep -nE 'error:|Error \(|Failed to build|Could not|couldn.t be opened|fatal error:' "${log}" | tail -n 100 || true
             echo "::endgroup::"
             echo "::group::Build log tail"
             tail -n 160 "${log}"

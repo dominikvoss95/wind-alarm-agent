@@ -50,16 +50,20 @@ class WindMeasurement {
 
   bool get isValid => fetchStatus == 'success' && updatedAt.isNotEmpty;
 
-  bool get isCurrentlyFresh {
-    if (updatedAt.isEmpty) return false;
-    try {
-      final updatedTime = DateTime.parse(updatedAt).toLocal();
-      final difference = DateTime.now().difference(updatedTime);
-      return difference.inMinutes < 60;
-    } catch (_) {
-      return false;
-    }
+  /// Fresh when the measurement time (observedAt, otherwise updatedAt) is
+  /// inside the last 60 minutes. A recent agent run must not make an old
+  /// observedAt look live.
+  bool isFreshAt(DateTime now) {
+    if (fetchStatus != 'success' || !isFresh) return false;
+    final raw = (observedAt != null && observedAt!.isNotEmpty) ? observedAt! : updatedAt;
+    if (raw.isEmpty) return false;
+    final parsed = DateTime.tryParse(raw)?.toLocal();
+    if (parsed == null) return false;
+    final age = now.difference(parsed);
+    return age.inMinutes >= -2 && age.inMinutes < 60;
   }
+
+  bool get isCurrentlyFresh => isFreshAt(DateTime.now());
 }
 
 class WindApiService {

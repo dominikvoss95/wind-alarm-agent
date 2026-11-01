@@ -81,6 +81,16 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "logs:PutLogEvents"
         ]
         Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricData"]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "cloudwatch:namespace" = "WindAlarm"
+          }
+        }
       }
     ]
   })
@@ -166,15 +176,25 @@ resource "aws_lambda_function" "wind_alarm" {
   }
 }
 
-# EventBridge rule for scheduled execution
-resource "aws_cloudwatch_event_rule" "morning_check" {
-  name                = "wind-alarm-morning-check"
-  description         = "Triggers wind alarm every 5 minutes from 03:00 through 04:55 UTC (05:00-06:55 CEST)"
-  schedule_expression = "cron(*/5 3-4 * * ? *)"
+# Primary scheduler. GitHub Actions cron is best-effort and is only a backup.
+# Hours are the union of CET and CEST so 05:00-08:00 Berlin (Kochelsee) and
+# 05:00-10:00 Berlin (Gardasee) are inside the schedule all year.
+# cron(*/5 3-7) is 03:00-07:55 UTC: 04:00-08:55 CET and 05:00-09:55 CEST.
+# cron(*/5 3-9) is 03:00-09:55 UTC: 04:00-10:55 CET and 05:00-11:55 CEST.
+resource "aws_cloudwatch_event_rule" "kochelsee_check" {
+  name                = "wind-alarm-kochelsee"
+  description         = "Kochelsee every 5 minutes, UTC hours 3-7 (covers 05:00-08:00 Berlin in CET and CEST)"
+  schedule_expression = "cron(*/5 3-7 * * ? *)"
+}
+
+resource "aws_cloudwatch_event_rule" "gardasee_check" {
+  name                = "wind-alarm-gardasee"
+  description         = "Gardasee every 5 minutes, UTC hours 3-9 (covers 05:00-10:00 Berlin in CET and CEST)"
+  schedule_expression = "cron(*/5 3-9 * * ? *)"
 }
 
 resource "aws_cloudwatch_event_target" "trigger_kochelsee" {
-  rule      = aws_cloudwatch_event_rule.morning_check.name
+  rule      = aws_cloudwatch_event_rule.kochelsee_check.name
   target_id = "WindAlarmKochelsee"
   arn       = aws_lambda_function.wind_alarm.arn
   input     = jsonencode({
@@ -184,7 +204,7 @@ resource "aws_cloudwatch_event_target" "trigger_kochelsee" {
 }
 
 resource "aws_cloudwatch_event_target" "trigger_gardasee" {
-  rule      = aws_cloudwatch_event_rule.morning_check.name
+  rule      = aws_cloudwatch_event_rule.gardasee_check.name
   target_id = "WindAlarmGardasee"
   arn       = aws_lambda_function.wind_alarm.arn
   input     = jsonencode({
@@ -193,12 +213,77 @@ resource "aws_cloudwatch_event_target" "trigger_gardasee" {
   })
 }
 
-resource "aws_lambda_permission" "allow_cloudwatch" {
-  statement_id  = "AllowExecutionFromCloudWatch"
+resource "aws_lambda_permission" "allow_kochelsee" {
+  statement_id  = "AllowKochelseeSchedule"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.wind_alarm.function_name
   principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.morning_check.arn
+  source_arn    = aws_cloudwatch_event_rule.kochelsee_check.arn
+}
+
+resource "aws_lambda_permission" "allow_gardasee" {
+  statement_id  = "AllowGardaseeSchedule"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.wind_alarm.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.gardasee_check.arn
+}
+
+# Dead-man's switch. An hourly invocation publishes SchedulerAlive=1.
+# The alarm treats missing data as a breach, so a stopped schedule pages
+# even when nobody pushes to the repository. Nights stay quiet because the
+# heartbeat still runs. Attach an email or SNS action in the console.
+resource "aws_cloudwatch_event_rule" "heartbeat" {
+  name                = "wind-alarm-heartbeat"
+  description         = "Hourly proof the scheduler is invoking Lambda"
+  schedule_expression = "cron(0 * * * ? *)"
+}
+
+resource "aws_cloudwatch_event_target" "heartbeat" {
+  rule      = aws_cloudwatch_event_rule.heartbeat.name
+  target_id = "WindAlarmHeartbeat"
+  arn       = aws_lambda_function.wind_alarm.arn
+  input     = jsonencode({
+    action = "heartbeat"
+  })
+}
+
+resource "aws_lambda_permission" "allow_heartbeat" {
+  statement_id  = "AllowHeartbeatSchedule"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.wind_alarm.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.heartbeat.arn
+}
+
+resource "aws_cloudwatch_metric_alarm" "scheduler_alive" {
+  alarm_name          = "wind-alarm-scheduler-silent"
+  alarm_description   = "No SchedulerAlive metric for two hours. EventBridge is not invoking the wind alarm Lambda."
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "SchedulerAlive"
+  namespace           = "WindAlarm"
+  period              = 3600
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+}
+
+resource "aws_cloudwatch_metric_alarm" "measurement_errors" {
+  alarm_name          = "wind-alarm-measurement-errors"
+  alarm_description   = "Lambda errors. A run with no fresh station reading returns 500. Missing data does not alarm, so nights are quiet."
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.wind_alarm.function_name
+  }
 }
 
 # EventBridge rule for daily forecast check at 12:00 CEST (10:00 UTC)

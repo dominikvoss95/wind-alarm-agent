@@ -19,11 +19,18 @@ class WindGraphState(TypedDict, total=False):
     raw_payload: str
     fetched_at: str
     fetch_status: str
+    # Station JSON (getWeatherData.php) and the webcam timezone used to read it.
+    station_json: str
+    cam_timezone: str
 
     observed_at: str
     base_wind_knots: float
     gust_knots: float
     parse_status: str
+    reading_source: str
+    raw_ocr_text: str
+    # False when the only timestamp is the fetch time, which is not the measurement.
+    has_measurement_time: bool
 
     is_fresh: bool
     threshold_exceeded: bool
