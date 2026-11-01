@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -79,8 +80,34 @@ def capture_webcam(page_url: str, dest_dir: Path | None = None) -> WebcamCapture
     )
 
 
+def _request(client: httpx.Client, url: str, headers: dict | None = None):
+    """GET with backoff. Logs the path only, never request headers (they carry the CSRF token)."""
+    delay = 1.0
+    last_error = "no response"
+    target = url.split("?", 1)[0]
+    for attempt in range(3):
+        try:
+            response = client.get(url, headers=headers)
+            if response.status_code in (429, 500, 502, 503, 504):
+                last_error = f"HTTP {response.status_code}"
+                logger.warning("retry %s attempt %s: %s", target, attempt + 1, last_error)
+                time.sleep(delay)
+                delay *= 2
+                continue
+            return response
+        except httpx.HTTPError as exc:
+            last_error = type(exc).__name__
+            logger.warning("retry %s attempt %s: %s", target, attempt + 1, last_error)
+            time.sleep(delay)
+            delay *= 2
+    logger.error("request failed after retries %s: %s", target, last_error)
+    return None
+
+
 def _page_identity(client: httpx.Client, page_url: str, spec: dict) -> tuple[str, str]:
-    response = client.get(page_url)
+    response = _request(client, page_url)
+    if response is None:
+        raise RuntimeError(f"page fetch failed for {page_url}")
     response.raise_for_status()
     html = response.text
     token_match = _CSRF_RE.search(html)
@@ -142,8 +169,11 @@ def _download_image(client: httpx.Client, spec: dict, dest: Path) -> str:
     stamp = int(datetime.now(timezone.utc).timestamp())
     url = spec["image_url"]
     separator = "&" if "?" in url else "?"
+    response = _request(client, f"{url}{separator}{stamp}")
+    if response is None:
+        logger.warning("image download failed for %s", spec["slug"])
+        return ""
     try:
-        response = client.get(f"{url}{separator}{stamp}")
         response.raise_for_status()
     except httpx.HTTPError as exc:
         logger.warning("image download failed for %s: %s", spec["slug"], exc)
@@ -160,12 +190,14 @@ def _get_json(client: httpx.Client, url: str, page_url: str, token: str) -> dict
     headers = {"Referer": page_url, "X-Requested-With": "XMLHttpRequest"}
     if token:
         headers["CsrfToken"] = token
+    response = _request(client, url, headers)
+    if response is None:
+        return None
     try:
-        response = client.get(url, headers=headers)
         response.raise_for_status()
         return response.json()
     except (httpx.HTTPError, json.JSONDecodeError) as exc:
-        logger.warning("request failed %s: %s", url, exc)
+        logger.warning("request failed %s: %s", url.split("?", 1)[0], type(exc).__name__)
         return None
 
 

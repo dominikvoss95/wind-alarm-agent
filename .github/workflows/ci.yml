@@ -3,6 +3,7 @@ name: CI Checks
 on:
   push:
     branches: [main, develop]
+  pull_request:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
@@ -26,8 +27,30 @@ jobs:
       - name: Run Linting
         run: make lint
 
+      - name: Lint GitHub workflows
+        run: |
+          bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
       - name: Run Security Scan
         run: make scan
 
       - name: Build Docker Image
         run: make build
+
+  flutter-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          channel: stable
+          cache: true
+      - name: Flutter tests
+        run: |
+          flutter pub get
+          flutter test

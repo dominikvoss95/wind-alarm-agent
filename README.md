@@ -11,7 +11,7 @@ Wind Alarm watches live webcams at Kochelsee and Gardasee, reads the on-screen w
 
 Campione is fetched and shown, but it does not raise the Gardasee alarm on its own. Gusts are stored and displayed; the alarm uses base wind only. Wind is in knots (`kts`), the unit printed on the addicted-sports.com overlay.
 
-A reading is fresh when its timestamp is at most `freshness` minutes old (default 60). The scheduled jobs below are what actually pass 10 kt and 12 kt. `python app.py` without `--threshold` uses 12 kt for whichever location you select.
+A reading is fresh when the station timestamp (`utctstamp`) is at most 60 minutes old. The alarm uses that timestamp, not the time the job started. `python app.py --location kochelsee` uses that location's threshold (10 kt). Pass `--threshold` only to override it. A run with no fresh station reading exits non-zero. A failed OCR pass is not reported as 0 kt.
 
 ## Architecture
 
@@ -37,14 +37,28 @@ A separate forecast path screenshots Windfinder, Windguru, and the Föhn diagram
 
 ### Schedulers
 
-Two schedulers exist. They do not share one window.
+The local windows are Europe/Berlin clock times, all year: Kochelsee **05:00–08:00**, Gardasee **05:00–10:00**. Berlin is UTC+1 in winter (CET) and UTC+2 in summer (CEST). The UTC crons are the union of those two offsets, so the local window is inside the schedule in both seasons. That also runs a bit early in winter and a bit late in summer.
 
-- GitHub Actions `wind-alarm.yml`: every 15 minutes from 03:00 through 06:45 UTC, Kochelsee, threshold 10.
-- GitHub Actions `gardasee-alarm.yml`: every 15 minutes from 03:00 through 08:45 UTC, Gardasee, threshold 12.
-- GitHub Actions `verify-readings.yml`: compares the station feed with the overlay. The schedule runs only when the repository variable `WIND_READING_VERIFY` is `true`. `workflow_dispatch` and `python app.py --verify` always run, and neither sends a push.
-- Terraform EventBridge (`terraform/main.tf`): every 5 minutes from 03:00 through 04:55 UTC (about 05:00–06:55 CEST). One rule invokes Lambda for **both** locations (thresholds 10 and 12). Gardasee's longer morning window is only covered by the GitHub workflow.
+| Location | Local window | GitHub backup (every 15 min) | EventBridge primary (every 5 min) |
+| --- | --- | --- | --- |
+| Kochelsee | 05:00–08:00 | `*/15 3-7 * * *` (03:00–07:45 UTC) | `cron(*/5 3-7 * * ? *)` |
+| Gardasee | 05:00–10:00 | `*/15 3-9 * * *` (03:00–09:45 UTC) | `cron(*/5 3-9 * * ? *)` |
 
-The Flutter home screen shows the EventBridge window (05:00–07:00, every 5 minutes). The GitHub workflows are the longer 15-minute checks.
+EventBridge (`terraform/main.tf`) is the primary clock. It does not stop after a quiet repository, which is what silenced GitHub Actions from 29 April 2026 until 31 October 2026. GitHub Actions stays as a backup. It can skip or delay runs. After you apply the Terraform schedule, set the repository variable `WIND_ALARM_SEND_FROM_ACTIONS` to `false` so the backup still measures and fails the job when the station is down, but does not send a second push. Until that variable is set, GitHub still sends.
+
+One push per location per Berlin day. A later run in the same morning that is still above the threshold does not push again.
+
+`verify-readings.yml` compares the station feed with the overlay. Its schedule runs only when `WIND_READING_VERIFY` is `true`. It never sends a push.
+
+An hourly EventBridge heartbeat publishes `WindAlarm/SchedulerAlive`. The alarm `wind-alarm-scheduler-silent` treats missing data as a failure. A run with no fresh station reading returns HTTP 500 so `wind-alarm-measurement-errors` can fire. Neither alarm emails anyone until you attach a notification in the CloudWatch console.
+
+### If no alarm arrived
+
+1. Open the latest **Daily Wind Alarm Check** or **Daily Gardasee Wind Alarm Check** run. The step summary lists each station as `measured`, `stale`, or `fetch_failed`, with the knots, the UTC timestamp, and the source. Exit 0 means a fresh station reading. Exit 1 means only stale data. Exit 2 means nothing was read. A green run that printed `0.0 kt` and `fresh: False` was the old failure mode; current runs exit non-zero instead.
+2. If there is no run in the local window, GitHub skipped it. Check CloudWatch for `SchedulerAlive` after Terraform is applied. A silent scheduler is the `wind-alarm-scheduler-silent` alarm.
+3. Confirm the phone is subscribed: Kochelsee monitoring on (topic `wind_alarms_kochelsee`), Gardasee monitoring on (`wind_alarms_gardasee`). iOS needs the Push capability, an APNs key on Firebase project `wind-alarm-agent`, and Time Sensitive notifications allowed. See the notes on pull request #4 for the Firebase bundle id.
+4. `FIREBASE_SERVICE_ACCOUNT_JSON` must be a key for project `wind-alarm-agent`. The log line names the project id and not the key.
+5. The picture on the webcam can lag the station JSON by about a minute. The alarm uses the JSON. `python app.py --verify --location kochelsee` compares them and does not push.
 
 ### HTTP API
 

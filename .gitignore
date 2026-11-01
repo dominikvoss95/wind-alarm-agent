@@ -16,6 +16,8 @@ specs.md
 # Debug and data
 debug/
 data/
+actionlint
+.alarm-ledger/
 /tmp/
 
 # IDEs

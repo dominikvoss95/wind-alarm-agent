@@ -88,10 +88,20 @@ class Config:
         },
     }
 
+    # Local windows are Europe/Berlin clock times, inclusive. UTC crons are the
+    # union of CET (UTC+1) and CEST (UTC+2) so both seasons are covered.
+    # GitHub fires every 15 minutes and is only a backup. EventBridge is primary
+    # and fires every 5 minutes once Terraform is applied.
     LOCATIONS = {
         "kochelsee": {
             "name": "Kochelsee",
             "fcm_topic": "wind_alarms_kochelsee",
+            "threshold_knots": 10.0,
+            "freshness_minutes": 60,
+            "local_start": "05:00",
+            "local_end": "08:00",
+            "github_cron": "*/15 3-7 * * *",
+            "eventbridge_cron": "cron(*/5 3-7 * * ? *)",
             "urls": [
                 "https://www.addicted-sports.com/webcam/kochelsee/trimini/"
             ],
@@ -99,6 +109,12 @@ class Config:
         "gardasee": {
             "name": "Gardasee",
             "fcm_topic": "wind_alarms_gardasee",
+            "threshold_knots": 12.0,
+            "freshness_minutes": 60,
+            "local_start": "05:00",
+            "local_end": "10:00",
+            "github_cron": "*/15 3-9 * * *",
+            "eventbridge_cron": "cron(*/5 3-9 * * ? *)",
             "urls": [
                 "https://www.addicted-sports.com/webcam/gardasee/malcesinenord/",
                 "https://www.addicted-sports.com/webcam/gardasee/malcesine/",

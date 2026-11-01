@@ -6,15 +6,23 @@ import argparse
 import os
 import time
 from wind_alarm.config import config
+from wind_alarm.logger import configure_logging
+from wind_alarm.run_report import format_summary, measurement_exit_code, write_step_summary
 
 
 def main():
+    configure_logging()
     parser = argparse.ArgumentParser(description="Run the Wind Alarm Agent.")
     parser.add_argument("--api", action="store_true", help="Serve the HTTP API instead of running a check")
     parser.add_argument("--host", type=str, default=os.environ.get("HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
     parser.add_argument("--location", type=str, default="kochelsee", choices=["kochelsee", "gardasee"])
-    parser.add_argument("--threshold", type=float, default=12.0)
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=None,
+        help="Knots the base wind must exceed. Defaults to the location setting (10 Kochelsee, 12 Gardasee).",
+    )
     parser.add_argument("--freshness", type=int, default=60)
     parser.add_argument(
         "--orchestrator",
@@ -52,7 +60,9 @@ def main():
     location_cfg = config.LOCATIONS.get(args.location)
     if not location_cfg:
         print(f"Error: Unknown location '{args.location}'")
-        return
+        raise SystemExit(2)
+    if args.threshold is None:
+        args.threshold = float(location_cfg["threshold_knots"])
 
     from wind_alarm.orchestrator import get_orchestrator
 
@@ -65,8 +75,12 @@ def main():
 
     from wind_alarm.aggregator import run_and_aggregate_measurements
 
-    print(f"Starting Wind Alarm Agent for {location_cfg['name']}")
+    print(
+        f"Starting Wind Alarm Agent for {location_cfg['name']} "
+        f"threshold>{args.threshold:g} freshness={args.freshness}m"
+    )
 
+    exit_code = 2
     while True:
         result = run_and_aggregate_measurements(
             location_id=args.location,
@@ -74,12 +88,28 @@ def main():
             freshness=args.freshness,
             orchestrator=orchestrator,
         )
+        webcams = result.get("webcams") or {}
+        exit_code = result.get("run_exit_code")
+        if exit_code is None:
+            exit_code = measurement_exit_code([
+                info.get("status", "fetch_failed") for info in webcams.values() if isinstance(info, dict)
+            ])
         print(f"Aggregation complete. Threshold exceeded: {result.get('threshold_exceeded')}")
-        for cam_id, info in result.get("webcams", {}).items():
-            print(f"  {cam_id}: {info.get('base_wind')} kts (fresh: {info.get('is_fresh')})")
+        for cam_id, info in webcams.items():
+            if not isinstance(info, dict):
+                print(f"  {cam_id}: fetch_failed")
+                continue
+            print(
+                f"  {cam_id}: status={info.get('status')} "
+                f"wind={info.get('base_wind')} gust={info.get('gust')} "
+                f"at={info.get('observed_at')} source={info.get('reading_source')}"
+            )
+            if info.get("error_message"):
+                print(f"    error: {info.get('error_message')}")
+        write_step_summary(format_summary(args.location, args.threshold, webcams, exit_code))
 
         if not args.loop:
-            break
+            raise SystemExit(exit_code)
         time.sleep(args.interval * 60)
 
 

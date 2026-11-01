@@ -1,11 +1,14 @@
 name: Daily Wind Alarm Check
 
+# Backup scheduler. EventBridge is primary once Terraform is applied.
+# UTC hours 3-7 cover 05:00-08:00 Europe/Berlin in both CET and CEST
+# (winter also runs 04:00-05:00, summer also runs until 09:45).
+# GitHub cron is best-effort: it can skip or delay runs, and it stops after
+# 60 days without a commit. Do not treat a green history here as proof the
+# alarm clock ran.
 on:
   schedule:
-    # Runs every 15 minutes between 03:00 and 06:00 UTC (05:00 - 08:00 CEST).
-    # This covers the typical early morning wind window at Kochelsee.
-    - cron: '*/15 3-6 * * *'
-  
+    - cron: '*/15 3-7 * * *'
   workflow_dispatch:
 
 env:
@@ -14,10 +17,9 @@ env:
 jobs:
   check-wind:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     env:
-      # Fallback when a run has no per-location topic. Kochelsee alarms use
-      # config.LOCATIONS (wind_alarms_kochelsee), which the Flutter app subscribes to.
       FCM_TOPIC: "wind_alarms_kochelsee"
 
     steps:
@@ -35,9 +37,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Install Playwright Browsers
+      - name: Berlin date
+        id: day
         run: |
-          playwright install --with-deps chromium
+          mkdir -p .alarm-ledger
+          echo "day=$(TZ=Europe/Berlin date +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore alarm ledger
+        uses: actions/cache/restore@v4
+        with:
+          path: .alarm-ledger
+          key: alarm-ledger-kochelsee-${{ steps.day.outputs.day }}-${{ github.run_id }}
+          restore-keys: |
+            alarm-ledger-kochelsee-${{ steps.day.outputs.day }}-
 
       - name: Create Firebase Service Account Key
         env:
@@ -48,7 +60,26 @@ jobs:
           fi
 
       - name: Run Wind Alarm Agent
-        run: |
-          PYTHONPATH=src python app.py --location kochelsee --threshold 10.0
         env:
           PYTHONPATH: src
+          WIND_ALARM_LEDGER: .alarm-ledger/ledger.json
+          # Set the repository variable WIND_ALARM_SEND_FROM_ACTIONS to false
+          # after EventBridge is applied, so this backup measures but does
+          # not send a second push.
+          WIND_ALARM_SEND: ${{ vars.WIND_ALARM_SEND_FROM_ACTIONS == 'false' && 'false' || 'true' }}
+        run: python app.py --location kochelsee
+
+      - name: Save alarm ledger
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .alarm-ledger
+          key: alarm-ledger-kochelsee-${{ steps.day.outputs.day }}-${{ github.run_id }}
+
+      - name: Upload run files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kochelsee-${{ github.run_id }}
+          path: debug
+          if-no-files-found: ignore

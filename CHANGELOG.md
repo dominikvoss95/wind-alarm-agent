@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 ### Fixed
+- GitHub Actions is a backup clock. EventBridge is the primary schedule and covers 05:00–08:00 (Kochelsee) and 05:00–10:00 (Gardasee) Berlin time in both CET and CEST. A run with no fresh station reading exits non-zero instead of printing 0 kt and succeeding. OCR cannot authorize an alarm. One push per location per Berlin day.
 - Wind readings followed a full-page screenshot. The overlay no longer prints "Wind" / "Böen": base wind is an unlabeled knots value, gust is "Böe" with decimals, and the °C line and the clock sit in the same box. OCR and the vision prompt could return the temperature or the hour. The agent now reads the station feed (the panel's source) and only falls back to a crop of that overlay.
 - A fetch time was treated as the measurement time, so a stale frame still looked fresh. Archive hashes were parsed as UTC instead of the webcam's local time.
 - iOS often never subscribed to `wind_alarms_kochelsee` (the switch started armed, but subscribe ran only on a later toggle), the Firebase iOS options pointed at a different project and bundle id than the app, and the push had no APNs alert headers, sound, or time-sensitive level. Data-only handling could not run without the remote-notification background mode.
