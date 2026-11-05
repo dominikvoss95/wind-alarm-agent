@@ -1,12 +1,19 @@
-# Terraform Infrastructure for Wind Alarm Agent on Microsoft Azure
+# Optional Azure stack. Kept apart from terraform/ so the AWS pipeline
+# can plan and apply without Azure credentials.
 
 terraform {
+  required_version = ">= 1.11.0"
+
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
       version = "~> 3.0"
     }
   }
+}
+
+provider "azurerm" {
+  features {}
 }
 
 # Resource Group
@@ -70,7 +77,7 @@ resource "azurerm_cosmosdb_account" "cosmos" {
     location          = azurerm_resource_group.rg.location
     failover_priority = 0
   }
-  
+
   # Enable free tier if applicable (limited to 1 per subscription)
   # enable_free_tier = true
 }

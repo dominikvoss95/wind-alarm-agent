@@ -1,0 +1,269 @@
+name: Terraform
+
+# Plans and applies the AWS stack in terraform/ with GitHub OIDC.
+# No static AWS access keys. Role ARNs are repository variables.
+# Bootstrap (terraform/bootstrap) is applied once from a laptop and is not
+# run here, so this workflow cannot widen its own IAM role.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform.yml'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Zum Anwenden exakt apply eingeben'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-aws
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  TF_IN_AUTOMATION: 'true'
+  TF_INPUT: '0'
+  AWS_REGION: eu-central-1
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: Reject static AWS keys
+        run: bash scripts/check_terraform_workflow.sh
+
+      - name: Validate AWS stack
+        working-directory: terraform
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+      - name: Validate bootstrap stack
+        working-directory: terraform/bootstrap
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+  confirm:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require confirm=apply on main
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "Apply is only allowed from main (current ref: $REF)."
+            exit 1
+          fi
+          if [ "$CONFIRM" != "apply" ]; then
+            echo "Stopped. The confirm input must be exactly: apply"
+            exit 1
+          fi
+
+  plan:
+    needs: [validate, confirm]
+    if: >-
+      always() &&
+      needs.validate.result == 'success' &&
+      (needs.confirm.result == 'success' || needs.confirm.result == 'skipped') &&
+      vars.AWS_PLAN_ROLE_ARN != '' &&
+      vars.TF_STATE_BUCKET != '' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: eu-central-1
+          role-session-name: gha-plan-${{ github.run_id }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: terraform
+        run: terraform init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+
+      - name: Terraform plan
+        working-directory: terraform
+        run: |
+          set -o pipefail
+          terraform plan -input=false -no-color -lock-timeout=5m -out=tfplan | tee plan.txt
+
+      - name: Upload plan
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tfplan-${{ github.run_id }}
+          path: |
+            terraform/tfplan
+            terraform/plan.txt
+          retention-days: 5
+          if-no-files-found: error
+
+      - name: Plan summary
+        run: |
+          {
+            echo "## Terraform plan"
+            echo
+            echo '```'
+            cat terraform/plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on pull request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('fs')
+            const marker = '<!-- terraform-plan -->'
+            const raw = fs.readFileSync('terraform/plan.txt', 'utf8')
+            const max = 50000
+            const clipped = raw.length > max ? `${raw.slice(0, max)}\n... (gekürzt)` : raw
+            const safe = clipped.replace(/```/g, "'''")
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const body = [
+              marker,
+              '### Terraform-Plan',
+              '',
+              `Nur Lesen. Apply läuft nicht auf diesem Pull Request. [Lauf](${runUrl})`,
+              '',
+              '<details><summary>Plan</summary>',
+              '',
+              '```',
+              safe,
+              '```',
+              '',
+              '</details>',
+            ].join('\n')
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            })
+            const existing = comments.find((comment) => comment.body && comment.body.includes(marker))
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              })
+            }
+
+  apply:
+    needs: plan
+    if: >-
+      always() &&
+      needs.plan.result == 'success' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      vars.AWS_APPLY_ROLE_ARN != '' &&
+      vars.TF_STATE_BUCKET != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          aws-region: eu-central-1
+          role-session-name: gha-apply-${{ github.run_id }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: terraform
+        run: terraform init -input=false -backend-config="bucket=${TF_STATE_BUCKET}"
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+
+      - name: Download plan
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: tfplan-${{ github.run_id }}
+          path: terraform
+
+      - name: Terraform apply
+        working-directory: terraform
+        run: terraform apply -input=false -no-color -lock-timeout=5m tfplan
+
+  not-configured:
+    needs: validate
+    if: >-
+      always() &&
+      needs.validate.result == 'success' &&
+      (vars.AWS_PLAN_ROLE_ARN == '' || vars.AWS_APPLY_ROLE_ARN == '' || vars.TF_STATE_BUCKET == '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Manual apply cannot run yet
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "AWS_PLAN_ROLE_ARN, AWS_APPLY_ROLE_ARN or TF_STATE_BUCKET is unset."
+          echo "Finish the one-time setup in docs/terraform-oidc.md, then run this again."
+          exit 1
+
+      - name: OIDC is not configured yet
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          echo "::notice title=Terraform OIDC::AWS_PLAN_ROLE_ARN, AWS_APPLY_ROLE_ARN or TF_STATE_BUCKET is unset. Plan and apply are skipped until the one-time setup in docs/terraform-oidc.md is done."

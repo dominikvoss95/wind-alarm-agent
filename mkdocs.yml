@@ -2,6 +2,7 @@ site_name: Wind Alarm Agent
 nav:
   - Home: index.md
   - Architecture: flutter_app_architecture.md
+  - Terraform OIDC: terraform-oidc.md
 
 theme:
   name: material

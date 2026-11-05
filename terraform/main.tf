@@ -1,11 +1,22 @@
 # Infrastructure for Wind Alarm Agent
 
 terraform {
+  required_version = ">= 1.11.0"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+  }
+
+  # The bucket is account-specific and is created by terraform/bootstrap.
+  # terraform init -backend-config="bucket=$TF_STATE_BUCKET"
+  backend "s3" {
+    key          = "wind-alarm-agent/aws.tfstate"
+    region       = "eu-central-1"
+    encrypt      = true
+    use_lockfile = true
   }
 }
 
@@ -51,8 +62,8 @@ resource "aws_iam_role_policy" "lambda_policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = ["bedrock:InvokeModel"]
+        Effect   = "Allow"
+        Action   = ["bedrock:InvokeModel"]
         Resource = "arn:aws:bedrock:*::foundation-model/amazon.nova-lite-v1:0"
       },
       {
@@ -131,10 +142,10 @@ resource "aws_s3_bucket_policy" "web_assets_policy" {
 
 # DynamoDB Table for Historical Data
 resource "aws_dynamodb_table" "knowledge_base" {
-  name           = "wind-alarm-knowledge-base"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "location_id"
-  range_key      = "observed_at"
+  name         = "wind-alarm-knowledge-base"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "location_id"
+  range_key    = "observed_at"
 
   attribute {
     name = "location_id"
@@ -197,7 +208,7 @@ resource "aws_cloudwatch_event_target" "trigger_kochelsee" {
   rule      = aws_cloudwatch_event_rule.kochelsee_check.name
   target_id = "WindAlarmKochelsee"
   arn       = aws_lambda_function.wind_alarm.arn
-  input     = jsonencode({
+  input = jsonencode({
     location  = "kochelsee"
     threshold = 10.0
   })
@@ -207,7 +218,7 @@ resource "aws_cloudwatch_event_target" "trigger_gardasee" {
   rule      = aws_cloudwatch_event_rule.gardasee_check.name
   target_id = "WindAlarmGardasee"
   arn       = aws_lambda_function.wind_alarm.arn
-  input     = jsonencode({
+  input = jsonencode({
     location  = "gardasee"
     threshold = 12.0
   })
@@ -243,7 +254,7 @@ resource "aws_cloudwatch_event_target" "heartbeat" {
   rule      = aws_cloudwatch_event_rule.heartbeat.name
   target_id = "WindAlarmHeartbeat"
   arn       = aws_lambda_function.wind_alarm.arn
-  input     = jsonencode({
+  input = jsonencode({
     action = "heartbeat"
   })
 }
@@ -297,7 +308,7 @@ resource "aws_cloudwatch_event_target" "forecast_kochelsee" {
   rule      = aws_cloudwatch_event_rule.forecast_check.name
   target_id = "WindForecastKochelsee"
   arn       = aws_lambda_function.wind_alarm.arn
-  input     = jsonencode({
+  input = jsonencode({
     action   = "forecast"
     location = "kochelsee"
   })
@@ -307,7 +318,7 @@ resource "aws_cloudwatch_event_target" "forecast_gardasee" {
   rule      = aws_cloudwatch_event_rule.forecast_check.name
   target_id = "WindForecastGardasee"
   arn       = aws_lambda_function.wind_alarm.arn
-  input     = jsonencode({
+  input = jsonencode({
     action   = "forecast"
     location = "gardasee"
   })
