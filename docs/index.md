@@ -20,4 +20,4 @@ A run with no fresh station reading exits non-zero. Schedules, the dead-man's sw
 
 ## Deployment
 
-Apply Terraform for the EventBridge rules and CloudWatch alarms. Do not rely on GitHub cron alone. Details are in the [README](../README.md).
+Apply Terraform for the EventBridge rules and CloudWatch alarms. Do not rely on GitHub cron alone. Details are in the [README](../README.md). GitHub Actions assumes an AWS role with OIDC; the one-time setup is in [Terraform OIDC](terraform-oidc.md) (German).

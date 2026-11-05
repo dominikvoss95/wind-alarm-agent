@@ -21,11 +21,13 @@ All notable changes to this project will be documented in this file.
 - The Kochelsee workflow's fallback FCM topic did not match `wind_alarms_kochelsee`. The EventBridge description quoted a UTC window the cron expression does not run.
 
 ### Changed
+- The Azure files live in `terraform/azure/` so the AWS Terraform commands no longer load them.
 - README now covers the agent, both schedules, Lambda/Docker, the Flutter app, and the environment variable names.
 - `requirements.txt` includes `python-dotenv`, `fastapi`, and `uvicorn`, which the API and config loader import.
 - Pylint is configured in `.pylintrc` so `make lint` checks the current tree without a style-only rewrite.
 
 ### Added
+- GitHub Actions plans and applies the AWS stack with OIDC. `terraform/bootstrap` creates the identity provider, the state bucket, and separate plan and apply roles. The one-time steps are in `docs/terraform-oidc.md`.
 - Initial project structure created.
 - Dependencies defined in `requirements.txt`.
 - `README.md` and `CHANGELOG.md` created.

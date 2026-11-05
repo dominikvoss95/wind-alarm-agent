@@ -154,9 +154,9 @@ flutter analyze
 
 ## Deployment
 
-- **GitHub Actions.** `.github/workflows/ci.yml` runs tests, pylint, the security scan, and `make build` on pushes to `main` and `develop`. The two wind workflows above run on a schedule and can also be started with `workflow_dispatch`.
-- **AWS.** `terraform/` creates ECR, the Lambda image function, DynamoDB, a public S3 bucket for the JSON the app polls, and the EventBridge rules. `make tf-init`, `make tf-plan`, and `make tf-apply` wrap Terraform. `make push-image` publishes `Dockerfile.lambda`.
-- **Azure.** `terraform/azure.tf` defines a resource group, Azure OpenAI, Cosmos DB, a Blob container, and a Consumption Function App with `USE_AZURE=true`. The Function App image registry in that file is still `mcr.microsoft.com` and is not pointed at a built image. The Python code stores history in Cosmos DB and JSON in Blob Storage when `USE_AZURE` is set. `make tf-init` loads this stack together with the AWS files, because both live in `terraform/`.
+- **GitHub Actions.** `.github/workflows/ci.yml` runs tests, pylint, the security scan, `make build`, and `terraform validate` on pushes to `main` and `develop`. The two wind workflows above run on a schedule and can also be started with `workflow_dispatch`. `.github/workflows/terraform.yml` plans and applies the AWS stack with GitHub OIDC. It does not use long-lived AWS keys.
+- **AWS.** `terraform/` creates ECR, the Lambda image function, DynamoDB, a public S3 bucket for the JSON the app polls, and the EventBridge rules. State is in an S3 bucket created by `terraform/bootstrap`. `make tf-init` needs `TF_STATE_BUCKET`. `make tf-plan` and `make tf-apply` wrap Terraform. `make push-image` publishes `Dockerfile.lambda`. The one-time OIDC setup is in [docs/terraform-oidc.md](docs/terraform-oidc.md) (German).
+- **Azure.** `terraform/azure/` defines a resource group, Azure OpenAI, Cosmos DB, a Blob container, and a Consumption Function App with `USE_AZURE=true`. The Function App image registry in that file is still `mcr.microsoft.com` and is not pointed at a built image. The Python code stores history in Cosmos DB and JSON in Blob Storage when `USE_AZURE` is set. `make tf-azure-init` initializes that stack on its own. `make tf-init` does not load it. That file is not applied by the AWS workflow. `terraform validate` still rejects it under azurerm 3.x (`kind = "AIServices"` and the deployment `sku` block).
 - **iOS.** `.github/workflows/ios-deploy.yml` builds the Flutter iOS app on macOS and uploads it to TestFlight with an App Store Connect API key. The workflow runs on pushes to `main` and via `workflow_dispatch`.
 
 ## Environment variables and secrets
@@ -182,7 +182,15 @@ Names only. Do not commit values. `.env` is gitignored; `python-dotenv` loads it
 | `AZURE_STORAGE_CONNECTION_STRING` or `AZURE_STORAGE_ACCOUNT_URL` | Blob Storage |
 | `AZURE_STORAGE_CONTAINER_NAME` | Blob container (default `wind-alarm-assets`) |
 
-AWS credentials are the standard SDK variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` or an instance/task role).
+Local AWS credentials are the standard SDK chain (`AWS_PROFILE`, or `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, plus `AWS_REGION` or an instance/task role). The GitHub Actions Terraform workflow does not use those keys. It assumes `AWS_PLAN_ROLE_ARN` or `AWS_APPLY_ROLE_ARN`.
+
+GitHub Actions variables for Terraform (not secrets):
+
+| Variable | Used by |
+| --- | --- |
+| `AWS_PLAN_ROLE_ARN` | `terraform.yml` plan job |
+| `AWS_APPLY_ROLE_ARN` | `terraform.yml` apply job |
+| `TF_STATE_BUCKET` | `terraform.yml` and `make tf-init` |
 
 GitHub Actions secrets:
 
@@ -200,6 +208,8 @@ src/wind_alarm/aws/            Lambda handler and Bedrock orchestrator
 src/aws/  src/azure/           DynamoDB/S3 and Cosmos/Blob stores
 src/handlers/lambda_handler.py legacy Lambda entry, same aggregation path
 app/                           Flutter client
-terraform/                     AWS resources
-.github/workflows/             CI, both wind schedules, iOS TestFlight
+terraform/                     AWS resources (remote state)
+terraform/bootstrap/           one-time OIDC provider, state bucket, GitHub roles
+terraform/azure/               optional Azure stack, not applied by the AWS workflow
+.github/workflows/             CI, Terraform, both wind schedules, iOS TestFlight
 ```

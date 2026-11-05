@@ -2,7 +2,7 @@
 
 export PYTHONPATH := src:.
 
-.PHONY: help setup run test lint scan build push-image tf-init tf-plan tf-apply up down clean
+.PHONY: help setup run test lint scan build push-image tf-init tf-plan tf-apply tf-bootstrap-init tf-bootstrap-plan tf-azure-init up down clean
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -26,14 +26,24 @@ scan: ## Run security audits
 build: ## Build standard Docker image
 	docker build -t wind-alarm-agent .
 
-tf-init: ## Initialize Terraform
-	cd terraform && terraform init
+tf-init: ## Initialize the AWS stack. Requires TF_STATE_BUCKET.
+	@test -n "$(TF_STATE_BUCKET)" || { echo "Set TF_STATE_BUCKET. See docs/terraform-oidc.md"; exit 1; }
+	cd terraform && terraform init -input=false -backend-config="bucket=$(TF_STATE_BUCKET)"
 
-tf-plan: ## Plan infrastructure changes
-	cd terraform && terraform plan
+tf-plan: ## Plan AWS infrastructure changes
+	cd terraform && terraform plan -input=false -lock-timeout=5m
 
-tf-apply: ## Apply infrastructure changes
-	cd terraform && terraform apply -auto-approve
+tf-apply: ## Apply AWS infrastructure changes
+	cd terraform && terraform apply -input=false -lock-timeout=5m -auto-approve
+
+tf-bootstrap-init: ## Initialize the one-time GitHub OIDC bootstrap stack
+	cd terraform/bootstrap && terraform init -input=false
+
+tf-bootstrap-plan: ## Plan the one-time GitHub OIDC bootstrap stack
+	cd terraform/bootstrap && terraform plan -input=false
+
+tf-azure-init: ## Initialize the optional Azure stack
+	cd terraform/azure && terraform init -input=false
 
 push-image: ## Build and push container to AWS ECR
 	$(eval ECR_URL=$(shell cd terraform && terraform output -raw ecr_repository_url))
